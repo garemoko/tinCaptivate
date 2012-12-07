@@ -1,0 +1,107 @@
+ <!-- 
+	=============COPYRIGHT============ 
+	Tin Can-Can - A Tin Can API wrapper for Adobe Captivate
+    Copyright (C) 2012  Andrew Downes
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, version 3.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+	<http://www.gnu.org/licenses/>.
+	
+	=============CREDITS============ 
+	Thanks to Rustici Software for provision of TCDriver.js which powers
+	the calls to the Tin Can API and for developing the Tin Can API 
+	TCDriver.js is reproduced here by permission under the understanding that 
+	it is still a prototype. It comes from the prototype package found at:
+	http://scorm.com/project-tin-can-phase-3-prototyping-tin-can-content-outside-of-the-lms/
+	
+	Thanks also to Philip Hutchison of pipwerks.com fame for his excellent guides
+	on "Cleaning up Adobe Captivate�s SCORM Publishing Template", particularly guides 2,3 and 4.
+	
+	These can be found at:
+	http://pipwerks.com/2012/01/12/cleaning-up-adobe-captivate%E2%80%99s-scorm-publishing-template-part-2-html/
+	They are licensed under a Creative Commons Attribution-Share Alike 3.0 United States License. 
+	
+	=============DEVELOPMENT STATUS============
+	This software is currently in development and is NOT intended to be used
+	in a live situation. It doesn't even have a version number yet. 
+	
+	=============TO DO LIST============
+	There's lots to do not mentioned in this list, but I'm adding any reminders here.
+	
+	-finish interactions (correct responses, statement context and question descriptions)
+	-objectives?
+	-move javascript at bottom of html file into js file, perhaps using document.ready
+	-verb review: started and stopped (may need to wait for public lrs update)
+	-tidy up errors in log
+		-Have all "set" calls put the data in the state. 
+-->
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Insert Title here</title>
+		<style>
+			body { 
+			 background: #d5d4d1; 
+			 text-align: center;
+			}
+		</style>
+		<!-- swfobject -->
+		<script src="https://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js"></script>
+
+		<!-- jquery (Not currently used, but included because I'm sure it will be...) -->
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+		
+		<!-- Rustici's Tin Can functions - call these to access the Tin can API-->
+		<script src="http://tin-can-can.googlecode.com/files/TCDriver.js"></script>
+		
+		<!-- Base64 -->
+		<script src="http://tin-can-can.googlecode.com/files/base64.js"></script>
+		
+		<!-- Right Click Support from Pipwerks -->
+		<script src="http://tin-can-can.googlecode.com/files/SWFRightClick.js"></script>
+		
+		<!-- TinCanCan - main js file for this wrapper -->
+		<script src="TinCanCan.js"></script>
+		<!-- <script src="http://tin-can-can.googlecode.com/files/TinCanCan.js"></script>-->
+		
+		
+		
+		<script>
+			
+			/*============EDIT THESE==============*/
+			var strURLFile = "testcpt.swf",	// URL of the swf file to be used. (Normally just a filename in same directory).
+			strFlashWidth = "800", //Width of swf
+			strFlashHeight = "600"; //Height of swf
+			/*==========END EDIT THESE===========*/
+
+		</script>
+	</head>
+	<body >
+		<div id="CaptivateContent">&nbsp;</div>
+		
+		<noscript>
+			This course requires JavaScript to be enabled in your browser. Please enable JavaScript, then relaunch the course.
+		</noscript>
+		
+		<script>
+							
+			swfobject.embedSWF(strURLFile + strURLParams, "CaptivateContent", strFlashWidth, strFlashHeight, "10", false, flashvars, params, attributes, callbackFn);
+			
+			//Note: window.onunload and window.onbeforeunload do not work in all browsers. 
+			//They are included only as a backup if the user closes the window etc. 
+			//The Captivate Developer needs to provide an exit button or something that calls the CaptivateCompleted function.
+			//If this function is not called, inprogress will never be set to true. 
+			window.onbeforeunload = CaptivateCompleted;
+			window.onunload = CaptivateCompleted;
+			
+		</script>
+
+	</body>
+</html>
