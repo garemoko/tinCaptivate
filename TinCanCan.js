@@ -15,18 +15,7 @@ GNU General Public License for more details.
 <http://www.gnu.org/licenses/>.
 */
 
-/*============PULL FROM XML==============*/
-var courseId = "example.com/exampleCaptivateTCAPI";
 
-var courseObj = {
-	"id":courseId,
-	"definition":{
-		"type":"Course", //This will always be "Course" for courseObj 
-		"name":{"en-US":"Captivate Example - Tin Can Course", "en-GB":"Captivate Example - Tin Can Course"},
-		"description":{"en-US":"This is a description of the course.","en-GB":"This is a description of the course."}
-	}
-};
-/*============END PULL FROM XML==============*/
 
 /*============SWF EMBED VARIABLES==============*/
 var strURLParams = "?SCORM_API=1.0&SCORM_TYPE=0",
@@ -41,44 +30,129 @@ attributes = { id: "Captivate", name: "Captivate" };
 var value_store = [], //stores values such as score so that data is only sent to the LMS when it has chnaged. 
 attemptInProgress = false, //value currently sent to LRS
 attemptCompleted = false, //value currently sent to LRS
-completionChanged = false; //used to track if the completion status has been chnaged but not yet reported. 
+completionChanged = false, //used to track if the completion status has been chnaged but not yet reported. 
+startDuration; //the attempt duration at the start of the session
 /*============END OTHER GLOBAL VARIABLES==============*/
+TinCan.DEBUG = true;
+//Create an instance of the Tin Can Library
+var myTinCan = new TinCan();
 
 /*============CREATE LRS OBJECT==============*/
-/* Hard coded for testing purposes only. Change these values every time you test. */
-var myTCVars = new Object();;
-myTCVars.endpoint = "https://cloud.scorm.com/ScormEngineInterface/TCAPI/public/";
-myTCVars.auth = 'Basic ' + Base64.encode("<account id>" + ':' + "<password>"); 
-myTCVars.actor = '{ "mbox":["mailto:dummy13@example.com"], "name":["steve jones"] }';
-/* END Hard coded for testing purposes only. */
 
-tc_lrs = My_GetLRSObject(); //Comment out this line to leave tc_lrs as the result of TCDriver_GetLRSObject();
+//get the array of LRSes from the query string
+var LRSArray = getObjectFromQueryString('lrs');
 
-function My_GetLRSObject(){
-	var lrsProps = ["endpoint","auth","actor","registration","activity_id", "grouping", "activity_platform"];
-	var lrs = new Object();
-	var prop;
-	
-	for (var i = 0; i<lrsProps.length; i++){
-		prop = lrsProps[i];
-		if (myTCVars[prop]){
-			lrs[prop] = myTCVars[prop];
-			delete myTCVars[prop];
-		}
-	}
-	if(lrs.endpoint === undefined || lrs.endpoint == "" || lrs.auth === undefined || lrs.auth == ""){
-		TCDriver_Log(lrs.endpoint + '//' + lrs.auth);
-		return null;
-	}
-	
-	lrs.extended = myTCVars;
-	
-	return lrs;
-}
+//For each LRS in that array...
+$.each(LRSArray,function(index){
+	//...make a new LRS object (some reformatting required)...
+	var myLRS = new TinCan.LRS({
+		endpoint: LRSArray[index].endpoint, 
+		version: "0.95",
+		auth: 'Basic ' + Base64.encode(LRSArray[index].login + ':' + LRSArray[index].pass)
+	});
+	//...and add it to the Tin Can Object's library of record stores
+	myTinCan.recordStores[index] = myLRS;
+});
 
 /*============END CREATE LRS OBJECT==============*/
 
+/*============CREATE ACTOR OBJECT==============*/
 
+//Get the actor object from the querystring and use it to define a TinCan Agent
+var myActor= new TinCan.Agent(getObjectFromQueryString('actor'));
+//Tell the Tin Can driver to use this agent (TODO: test what this actually does i.e. does it affect authority or is it just a default?)
+myTinCan.actor = myActor;
+
+/*============END CREATE ACTOR OBJECT==============*/
+
+/*============CREATE THE ACTIVTY OBJECT==============*/
+//TODO: PULL THESE VALUES FROM XML OR SOMETHING 
+//TODO: Add support for multiple languages
+var courseName = "Name of Captivate Course in trans-Atlantic English";
+var courseDesc = "Description of Captivate Course in trans-Atlantic English";
+var courseId = "http://example.com/exampleCaptivate";
+//END Pull for XML
+
+
+//Create the activity definition
+var captivateActivityDefinition = new TinCan.ActivityDefinition({
+	type : "http://adlnet.gov/expapi/activities/course",
+	name:  {
+		"en-US" : courseName,
+		"en-GB" : courseName
+	},
+	description: {
+		"en-US" : courseDesc,
+		"en-GB" : courseDesc
+	},
+});
+
+//Create the activity
+var myActivity = new TinCan.Activity({
+	id : courseId,
+	definition : captivateActivityDefinition
+});
+
+//Tell the Tin Can driver to use this activity for all statements
+TinCan.Activity = myActivity;
+
+/*============END CREATE THE ACTIVTY OBJECT==============*/
+
+//TODO: ADD CONTEXT TO INCLUDE REVISION AND REGISTRATION AS A MINIMUM
+
+/*============CREATE PREDEFINED STATEMENT TEMPLATES==============*/
+
+
+
+//Declare statement Collection as a new Object to hold our template statements
+var statementsCollection = new Object();
+
+//For each verb, create an instance of the Tin Can Verb Object and add it to the collection for later use. 
+
+//attempted - an attempt has happened but the session ended before it was completed. 
+statementsCollection.attempted =  makeTemplateStatement();
+statementsCollection.attempted.verb = getVerb("attempted", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.attempted.result=getResult(false);
+
+//completed - an attempted has been completed but we are making no assertions as to whether it was successful or not
+statementsCollection.completed = makeTemplateStatement();
+statementsCollection.completed.verb = getVerb("completed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.completed.result =getResult(true);
+
+//passed - an attempt has been completed successfully
+statementsCollection.passed = makeTemplateStatement();
+statementsCollection.passed.verb = getVerb("passed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.passed.result = getResult(true, true);
+
+//failed - an attempt has been completed but it was not sucecssful
+statementsCollection.failed = makeTemplateStatement();
+statementsCollection.failed.verb = getVerb("failed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.failed.result = getResult(true, false);
+
+//started - A session started
+statementsCollection.started = makeTemplateStatement();
+statementsCollection.started.verb = getVerb("started", "http://www.tincanapi.co.uk/wiki/verbs:");
+
+
+//stopped - A session ended
+statementsCollection.stopped = makeTemplateStatement();
+statementsCollection.stopped.verb = getVerb("stopped", "http://www.tincanapi.co.uk/wiki/verbs:");
+
+
+/*============END=============*/
+
+/*============SET STATE SETTINGS==============*/
+var stateCfg = {
+	actor: TinCan.Agent,
+	activity: TinCan.Activity,
+	registration: '55da1b40-4181-11e2-a25f-0800200c9a66' 
+	//Note this unique UUID was generated by a UUID gentator so is and always will be unique. What? You wanted a DIFFERRENT unique number every time?
+	//TODO: put registration UUID in querystring and in Statement Context
+}
+
+//myTinCan.getState(key, stateCfg);
+
+/*============END=============*/
 
 /*============CREATE CMI CACHE==============*/
 var cmiCacheResultChanged = false; //if true, we have new data to send to the LRS
@@ -107,19 +181,79 @@ var cmiCache = function(property, value){
 
 
 
+$(function(){
+	
+	/*============LAUNCH CODE==============*/
+	
+	//Get the duration from the state if it exists (default "" which we interpret as "PT0H0M0S") and save it for later comparision. 
+	startDuration = TCCGetState("cmi.total_time"); //must be called AFTER the LRS object has been created 
 
-/*============LAUNCH CODE==============*/
+	myTinCan.sendStatement(statementsCollection.started, function() {});
+	
 
-//Get the duration from the state if it exists (default "" which we interpret as "PT0H0M0S") and save it for later comparision. 
-var startDuration = TCCGetState("cmi.total_time"); //must be called AFTER the LRS object has been created 
-			
-//Send an imported statement to set the course data
-TCDriver_SendStatement(tc_lrs, {"verb": "imported","object":courseObj});
+	/*============END LAUNCH CODE==============*/
 
 
-/*============END LAUNCH CODE==============*/
-
+});
 /*===========================================FUNCTIONS ONLY PAST THIS POINT========================================================*/
+
+
+function makeTemplateStatement()
+{
+	//create a base statement
+	return  new TinCan.Statement({
+		actor : myTinCan.actor,
+		target : TinCan.Activity
+	},true);
+}
+
+function getResult(completion,success)
+{
+	
+	if (typeof success == 'undefined')
+	{
+		return new TinCan.Result({
+			completion : completion,
+		});
+	}
+	else
+	{
+		return new TinCan.Result({
+			completion : completion,
+			success : success
+		});
+	}
+}
+
+function getVerb(verb, library, display)
+{
+	display = typeof display == 'undefined' ? verb : display;
+	return new TinCan.Verb({
+		id : library + verb,
+		display : {
+			"en-US" : display,
+			"en-GB" : display
+		}
+	});
+}
+
+
+function getObjectFromQueryString(objectToGet)
+{
+	var qString = $.getUrlVar(objectToGet);
+	
+	if (!(qString == undefined))
+	{
+		var objectToReturn = JSON.parse(urldecode(qString));
+		return objectToReturn;
+	}
+	else
+	{
+		return;
+	}
+}
+
+
 
 /*============DURATION FUNCTIONS==============*/
 function convertCMITimespanToSeconds(CMITimespan)
@@ -170,7 +304,7 @@ function convertSecondsToCMITimespan(inputSeconds)
 function addDurations(value_one,value_two)
 {
 	var duration = convertSecondsToCMITimespan(convertCMITimespanToSeconds(value_one) + convertCMITimespanToSeconds(value_two));
-	TCDriver_SetState(tc_lrs, courseId, "cmi.total_time", duration);
+	compareWithCacheAndSetState("cmi.total_time",duration,true)
 	return duration;
 }
 
@@ -182,7 +316,7 @@ function diffDurations(largeValue,smallValue)
 
 function resetClock() //reset the duration timer to zero
 {
-    TCDriver_SetState(tc_lrs, courseId, "cmi.total_time", "PTHM0S");
+	myTinCan.setState("cmi.total_time", "PTHM0S", stateCfg);
 	startDuration = "PTHM0S";
 };
 
@@ -191,7 +325,9 @@ function resetClock() //reset the duration timer to zero
 
 /*============SEND DATA TO LRS==============*/
 
-function TCCSendLessonData(inprogress, exiting)
+
+
+function TCCSendLessonData(exiting)
 {
 	//This function is called whenever completion status changes
 
@@ -199,15 +335,8 @@ function TCCSendLessonData(inprogress, exiting)
 	if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) && (!(attemptCompleted)))
 	{
 		
-		endAttempt()
+		endAttempt();
 	
-	}
-	
-	//Send an experienced statement at start and end of session
-	//note: a session may include multiple and/or partial attempts
-	if (((!(value_store["cmi.completion_status"] == "completed"))||(exiting=="true"))&&(!(attemptInProgress == inprogress)))
-	{
-		
 	}
 
 }
@@ -215,81 +344,79 @@ function TCCSendLessonData(inprogress, exiting)
 
 function endAttempt()
 {
-	var stmt;
-	
-	//Send lesson data statement
-	var verb  = "attempted"; 
-	var success = false;
-	
-	//Duration is updated in the state every time Captivate passes it so we just need to pull it out the state when it is time to report a statement.  
-	var duration = TCCGetState("cmi.total_time");
-		
+	var stmtToSend;		
 	
 	if (value_store["cmi.success_status"] == "passed")
 	{
-		verb = "passed";
-		success = true;
+		
+		stmtToSend = statementsCollection.passed;
 	}
 	else if (value_store["cmi.success_status"] == "failed")
 	{
-		verb = "failed";
-		success = false;
-	}
-	else if (value_store["cmi.success_status"] == "unknown")
-	{
-		verb = "completed";
-		success = true;
-	}
-	var completion = true;
-	if (!(value_store["cmi.completion_status"] == "completed"))
-	{
-		verb = "attempted";
-		completion = false;
-	}
 		
-		stmt = 
-		{ 
-			"verb": verb,
-			"inProgress":false,
-			"object":{"id":courseId},
-			"result":
-			{
-				"score":
-				{
-					"scaled":value_store["cmi.score.scaled"],
-					"raw":value_store["cmi.score.raw"],
-					"min":value_store["cmi.score.min"],
-					"max":value_store["cmi.score.max"]
-				},
-				"success":success,
-				"completion":completion,
-				"duration":duration
-			}
-		};
-		TCDriver_Log(stmt);
-		TCDriver_SendStatement(tc_lrs, stmt);
-		attemptCompleted = true; //Only send this success data once. 
-		//reset the clock. Note: this means slides after the completed attempt but before learner restarts are counted towards next attempt
-		resetClock();
+		stmtToSend = statementsCollection.failed;
+	}
+	else 
+	{
+		if (value_store["cmi.completion_status"] == "completed")
+		{
+			
+			stmtToSend = statementsCollection.completed;
+		}
+		else
+		{
+			
+			stmtToSend = statementsCollection.attempted;
+		}
+	}
+	
+	myTinCan.log("~~~~~~~~~~~~~~~~afetr if");
+	myTinCan.log("~~~~~~~~~~~~~~~~" + value_store["cmi.score.scaled"]);
+	
+	//Set the score, if present
+	stmtToSend.result.score = new TinCan.Score;
+	stmtToSend.result.score.scaled = value_store["cmi.score.scaled"];
+	myTinCan.log("~~~~~~~~~~~~~~~~score1");
+	stmtToSend.result.score.raw = value_store["cmi.score.raw"];
+	myTinCan.log("~~~~~~~~~~~~~~~~score2");
+	stmtToSend.result.score.min = value_store["cmi.score.min"];
+	myTinCan.log("~~~~~~~~~~~~~~~~score3");
+	stmtToSend.result.score.max = value_store["cmi.score.max"];
+	myTinCan.log("~~~~~~~~~~~~~~~~before deleteEmptyProperties");
+	stmtToSend.result.score = deleteEmptyProperties(stmtToSend.result.score);
+	
+	myTinCan.log("~~~~~~~~~~~~~~~~afetr result");
+	
+	//Set the Duration
+	stmtToSend.result.duration = TCCGetState("cmi.total_time");
+	
+	myTinCan.log("~~~~~~~~~~~~~~~~afetr time");
+	//Send the statement, no callback
+	myTinCan.sendStatement(stmtToSend, function() {});
+	
+	myTinCan.log("~~~~~~~~~~~~~~~~statement sent");
+		
+	attemptCompleted = true; //Only send this success data once. 
+	//reset the clock. Note: this means slides after the completed attempt but before learner restarts are counted towards next attempt
+	resetClock();
 }
 
-function sessionStatement()
+function sessionStoppedStatement()
 {
-	var stmt;
+myTinCan.log("~~~~~~~~~~~~~~~~Stopped statement");
+	var stmtToSend;
     var sessionDuration = value_store["cmi.session_time"];
     if (sessionDuration == "")
     {sessionDuration= "PTHM0S"}
+   
+    stmtToSend = statementsCollection.stopped;
+    stmtToSend.result = new TinCan.Result
+    stmtToSend.result.duration = sessionDuration;
+    
+    myTinCan.log('+++++++++++++++' + sessionDuration)
 
-	attemptInProgress = inprogress; //reset if the user retakes quiz
-	stmt = 
-	{ 
-		"verb": "experienced",
-		"inProgress":inprogress, //false for end of session, true for start of session
-		"object":{"id":courseId},
-		"result": { "duration": sessionDuration }
-	};
-	TCDriver_Log(stmt);
-	TCDriver_SendStatement(tc_lrs, stmt);
+	//Send the statement, no callback
+	myTinCan.sendStatement(stmtToSend, function() {});
 }
 
 
@@ -355,22 +482,42 @@ function TCCSendInteractionData(interactionIndex)
 			"response": value_store["cmi.interactions." + interactionIndex + ".learner_response"],
 			"duration": value_store["cmi.interactions." + interactionIndex + ".latency"],
 			"score" : { "raw" : interactionScore}
-		},
+		}, 
 		"timestamp": convertSecondsToCMITimespan(value_store["cmi.interactions." + interactionIndex + ".timestamp"])
 	};
 	
 	
-	
-	TCDriver_Log(stmt);
-	TCDriver_SendStatement(tc_lrs, stmt);
+	//Don't send interaction statements for now...
+	//TCDriver_Log(stmt);
+	//TCDriver_SendStatement(tc_lrs, stmt);
 	
 }
 
-function TCCSetParameter(parameter,value)
+function compareWithCacheAndSetState(parameter,value,requiredInState)
 {
+	var cached_value = cmiCache(parameter, value);
+	
+	if(!cached_value || cached_value !== value) {
+		//Save to the value store
+		value_store[parameter] = value;
+		
+		if (requiredInState)
+		{
+			myTinCan.setState(parameter, value, stateCfg);
+			
+			myTinCan.log('#############set state: ' + parameter + " ::: " + value)
+		}
+		
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
 
-	//Whatever happens, store value in the state in case we need it later
-	TCDriver_SetState (tc_lrs, courseId, parameter, value);
+function TCCSetParameter(parameter,value)
+{ //TODO: WORK THROUGH THIS FUNCTION AND SEE WHAT IS REALLY NEDED. 
 
 	//For SCORM 2004, Captivate sets a series of data every time it enters a new slide. 
 	//It always sets the same data regardless of changes.
@@ -392,63 +539,46 @@ function TCCSetParameter(parameter,value)
 	case "cmi.score.scaled": // score as a decimal
 	case "cmi.score.min": // Minimum value in the range for the raw score. I think this is always 0 in captivate
 	case "cmi.score.max": // Max possible score - this is set by the Captivate and doesn't change.
-	case "cmi.score.raw": // Points score so far by the learner
-		if(!cached_value || cached_value !== value) {
-			
-			   //Add the value to the cache
-			   value_store[parameter] = value;
-			   
-			   
-		}
+	case "cmi.score.raw": // Points score so far by the learner		
+		compareWithCacheAndSetState(parameter,value,false); //TODO: test if capitvate uses these when it gets them. Change to true if it does.
 	break;
 	case "cmi.success_status": // (�passed�, �failed�, �unknown�, RW) Indicates whether the learner has mastered the SCO
-	//Just update the cache to pass later
-		var cached_value = cmiCache(parameter, value);
-		if(!cached_value || cached_value !== value) {
-			
-			   //Add the value to the cache
-			   value_store[parameter] = value;
-		}
+	//Just update the cache to pass later	
+	//Add the value to the cache and update the state
+	compareWithCacheAndSetState(parameter,value,true);
+
 	break;
 	case "cmi.session_time": //(timeinterval (second,10,2), WO) Amount of time that the learner has spent in the current learner session for this SCO 
 		//e.g. "PT0H0M6S"
-
-	    //Add the value to the cache
-	    value_store[parameter] = value;
-
-		//Update the store 
+		
+		//update session duration
+		compareWithCacheAndSetState(parameter,value,true);
+		
+		//Update the attempt duration
 		addDurations(startDuration,value);
 	break;
 	case "cmi.completion_status": // (�completed�, �incomplete�, �not attempted�, �unknown�, RW) Indicates whether the learner has completed the SCO
 		
 		//Only send the data if it has chnaged
-		
-		var cached_value = cmiCache(parameter, value);
-		
 		//Only send value to LMS if it hasn't already been sent;
 		//If value is cached and matches what is about to be sent
 		//to the LMS, prevent value from being sent a second time.
-		if(!cached_value || cached_value !== value) {
-		
-		   //Add the value to the cache
-		   value_store[parameter] = value;
+		if(compareWithCacheAndSetState(parameter,value,true)) {
 		   completionChanged = true;
 		} 					
 	
 		break;
 	case "cmi.location": //0-index of the current slide - i.e. a bookmark.
 	case "cmi.suspend_data": //Captivate's Suspend Data string 
+	//save the data
+	compareWithCacheAndSetState(parameter,value,true);
+	
+	//Check if completion status chnaged in this batch of SCORM calls
 	if (completionChanged)
 	{
 		completionChanged = false;
-		if (value_store["cmi.completion_status"] == "completed")
-		   {
-			TCCSendLessonData("false", "false");
-		   }
-		   else
-		   {
-			TCCSendLessonData("true", "false");
-		   }
+		TCCSendLessonData("false");
+
 	}
 	break;
 	default:
@@ -470,21 +600,13 @@ function TCCSetParameter(parameter,value)
 				case "weighting": //How many points the question is worth
 				case "learner_response": //(format depends on interaction type, RW) Data generated when a learner responds to an interaction
 				case "result": // (�correct�, �incorrect�, �unanticipated�, �neutral�) or a real number with values that is accurate to seven significant decimal figures real. , RW) Judgment of the correctness of the learner response
-					var cached_value = cmiCache(parameter, value);
-					if(!cached_value || cached_value !== value) {
-						   //Add the value to the cache
-						   value_store[parameter] = value;
-					}
+					//compareWithCacheAndSetState(parameter,value,true);
 					break;
 				case "latency": //(timeinterval (second,10,2), RW) Time elapsed between the time the interaction was made available to the learner for response and the time of the first response
 					//Note: I.e. Time taken to answer the question, not (as you might think) the lag the learner was experiencing at the time of the interaction (though this would include lag)! 
 					//Consider reporting "since" and "until" using timestamp and latency data from the cmiCache
 					
-					var cached_value = cmiCache(parameter, value);
-					if(!cached_value || cached_value !== value) {
-						   //Add the value to the cache
-						   value_store[parameter] = value;
-					}
+					//compareWithCacheAndSetState(parameter,value,true);
 
 					TCCSendInteractionData(interaction_index);
 					
@@ -493,11 +615,7 @@ function TCCSetParameter(parameter,value)
 				//I have not yet witnessed captivate setting either "description" or "objectives", but they are included for completeness. 
 				case "description": //(localized_string_type (SmallestPossibleMaximum: 250), RW) Brief informative description of the interaction
 				case "objectives._count": //(non-negative integer, RO) Current number of objectives (i.e., objective identifiers) being stored by the LMS for this interaction
-					var cached_value = cmiCache(parameter, value);
-					if(!cached_value || cached_value !== value) {
-						   //Add the value to the cache
-						   value_store[parameter] = value;
-					}
+					//compareWithCacheAndSetState(parameter,value,true);
 					break;
 				default:
 				if (interaction_parameter == "correct_responses")
@@ -508,12 +626,7 @@ function TCCSetParameter(parameter,value)
 					{
 						case "pattern":  // (format depends on interaction type, RW) One correct response pattern for the interaction
 							//Note: This needs further testing with all of captivate's question types to see if 'correct_responses.1' etc. need to be supported. 
-							var cached_value = cmiCache(parameter, value);
-							if(!cached_value || cached_value !== value) {
-								   //Add the value to the cache
-								   value_store[parameter] = value;
-							}
-							
+							//compareWithCacheAndSetState(parameter,value,true);
 							break;
 						default:
 						TCDriver_Log("Captivate attempt to set the unexpected interaction correct_responses parameter: '" + parameter +"' with value: '" + value +"'");
@@ -551,14 +664,29 @@ function TCCSetParameter(parameter,value)
 /*============GET DATA FROM LRS==============*/
 function TCCGetState(parameter)
 {
-	//Trim any quotes surrounding the returned values. 
-	var rtnStr = TCDriver_GetState (tc_lrs, courseId, parameter);
-	if (rtnStr == undefined)
-		{rtnStr = ""}
+	
+	
+	//if we have the item in cache, don't bother the LRS 
+	if (value_store[parameter])
+	{
+		return value_store[parameter];
+	}
 	else
-		{rtnStr = rtnStr.replace (/(^")|("$)/g, '')}
-	//TCDriver_Log(rtnStr);
+	{
+	//Trim any quotes surrounding the returned values. 
+	var rtnStr = myTinCan.getState(parameter, stateCfg).contents;
+	if (rtnStr == undefined)
+		{
+			rtnStr = ""
+		}
+	else
+		{
+			rtnStr = rtnStr.replace (/(^")|("$)/g, '')
+		}
+		
+	myTinCan.log('#############get state: ' + parameter + ":::"+ rtnStr)
 	return rtnStr;
+	}
 }
 
 
@@ -573,7 +701,7 @@ function TCCGetParameter(parameter)
 	case "cmi.entry": // (ab_initio, resume, ��, RO) Asserts whether the learner has previously accessed the SCO
 		var entryState = TCCGetState("cmi.entry");
 		//Next time the user loads this activty, cmi.entry tells captivate that they have accessed this before. 
-		TCDriver_SetState (tc_lrs, courseId, "cmi.entry", "resume");
+		myTinCan.setState("cmi.entry", "resume", stateCfg);
 		
 		return entryState;
 		break;
@@ -633,6 +761,7 @@ function TCCGetParameter(parameter)
 // Handle fscommand messages from a Flash movie
 function Captivate_DoFSCommand(command, args)
 {//TODO: Test what happens if you delete this function entirely. 
+	
 
 	//Captivate 5.0 at least does call this function, but only to make invalid calls to the SCORM API to say that it has loaded or changed slide.
 	//It therefore served no usful purpose in the first place, and certainly isn't needed for TinCan
@@ -646,8 +775,10 @@ function Captivate_DoFSCommand(command, args)
 function Captivate_DoExternalInterface(command, parameter, value, variable)
 {
 	varstrErr = "true";
+	
 
-//TCDriver_Log("Captivate_DoExternalInterface: command: "+command+" parameter: "+ parameter+" value: "+ value+" variable: "+ variable);
+
+myTinCan.log("Captivate_DoExternalInterface: command: "+command+" parameter: "+ parameter+" value: "+ value+" variable: "+ variable);
 
 	//TODO: Check if we have a connection to the TCAPI, if not: return;
 
@@ -661,6 +792,11 @@ function Captivate_DoExternalInterface(command, parameter, value, variable)
 	else  if ( command == "LMSGetLastError" || command=="GetLastError")
 	{
 		strErr = 0;
+	}
+	else  if ( command == "LMSTerminate" || command=="Terminate")
+	{
+		endSession();
+		
 	}
 	else
 	{
@@ -677,7 +813,13 @@ function Captivate_DoExternalInterface(command, parameter, value, variable)
 /*============HANDLE CUSTOM CAPTIVATE FUNCTION CALLS==============*/
 function CaptivateCompleted() 
 {
-	TCCSendLessonData("false", "true");
+	TCCSendLessonData("true");
+	document.write("The Captivate Lesson has been completed. It is now safe to navigate away or close the popup window.");
+}
+
+function endSession() 
+{	    
+	sessionStoppedStatement();
 	document.write("The Captivate Lesson has been completed. It is now safe to navigate away or close the popup window.");
 }
 /*============END HANDLE CUSTOM CAPTIVATE FUNCTION CALLS==============*/

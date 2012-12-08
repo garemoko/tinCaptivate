@@ -1,0 +1,106 @@
+<!--
+=============COPYRIGHT============
+Prototype for Tin Can API
+Copyright (C) 2012  Andrew Downes
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+<http://www.gnu.org/licenses/>.
+
+=============CREDITS============
+Thanks to Rustici Software for provision of TCDriver.js which powers
+the calls to the Tin Can API and for developing the Tin Can API
+TCDriver.js is reproduced here by permission under the understanding that
+it is still a prototype. It comes from the prototype package found at:
+http://scorm.com/project-tin-can-phase-3-prototyping-tin-can-content-outside-of-the-lms/
+
+=============DEVELOPMENT STATUS============
+This software is currently in development and is NOT intended to be used
+in a live situation.
+
+-->
+<!doctype html>
+<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+<html>
+	<head>
+		
+		<meta name="viewport" content="width=600, initial-scale=1">
+		<title>I Did This</title>
+		<link rel="stylesheet" href="tinstatement.css" type="text/css" />
+		<!-- jquery  
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>-->
+		<script src="jquery-1.7.1.min.js"></script>
+
+		<!-- Base64 
+		<script src="http://tin-can-can.googlecode.com/files/base64.js"></script>-->
+		<script src="base64.js"></script>
+
+		<!-- generic functions used for capturing all or part of a statement with a web form (relies on certain HTML) -->
+		<script src="TinFormFunctions.js"></script>
+		<!-- main js file for this wrapper -->
+		<script src="TinLauncher.js"></script>
+
+	</head>
+	<body >
+
+		<h1>Captivate Launch Tool</h1>
+		<p>
+			Largly for testing and demo pruposes. In a production system, replace this form with some automated process based on the user's LMS login etc.
+		</p>
+
+		<!-- <input type="button" value="Build URL" name="btnSave" id="templateURL" class="button"/>
+		Navigate to a bookmarkable URL that autofills the above by querystring - only visible when Bookmark is not -->
+		<!-- <input type="button" value="Bookmark" name="btnBookmark" id="templateURL" class="button"/>
+		Bookmarks the saved page - only visible if page contains autofuilled fields. Hide when any field is changed.  -->
+
+		<div class="section" id="lrs">
+			<div class="background_div sevenEM">
+				Dear LRS,
+			</div>
+			<h2>The LRS</h2>
+			<p>
+				Your LRS should provide the following information:
+			</p>
+
+		</div>
+
+		<input type="button" value="+LRS" name="lrsLrsAdd" id="lrsLrsAdd" class="button" />
+		<!--Add a blank LRS at the bottom-->
+		<input type="button" value="-LRS" name="lrsLrsRemove" id="lrsLrsRemove" class="button displayNone"/>
+		<!--Removes the first blank field (not neccessarily the bottom field)-->
+
+		<div class="section" id="actor">
+			<div class="background_div">
+				I
+			</div>
+
+			<h2>Actor</h2>
+			<p>
+				Who is the statement about?
+			</p>
+			
+			<div id="actorAgent">
+				<h3>Agent</h3>
+			</div>
+			
+			<input type="button" value="+Agent" name="actorAgentAdd" id="actorAgentAdd" class="button displayNone agentAdd" />
+			<!--Add a blank actor at the bottom-->
+			<input type="button" value="-Agent" name="actorAgentRemove" id="actorAgentRemove" class="button displayNone agentRemove"/>
+			<!--Removes the first blank field (not neccessarily the bottom field)-->
+		</div>
+		
+		
+
+<input type="button" value="Launch!" name="sendStatement" id="sendStatement" class="button"/>
+
+		<noscript>
+			This course requires JavaScript to be enabled in your browser. Please enable JavaScript, then relaunch the course.
+		</noscript>
+	</body>
+</html>

@@ -55,11 +55,29 @@
 		<!-- swfobject -->
 		<script src="https://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js"></script>
 
-		<!-- jquery (Not currently used, but included because I'm sure it will be...) -->
+		<!-- jquery-->
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
 		
-		<!-- Rustici's Tin Can functions - call these to access the Tin can API-->
-		<script src="http://tin-can-can.googlecode.com/files/TCDriver.js"></script>
+		<!-- Rustici's Tin Can functions - call these to access the Tin Can API-->
+		<script type="text/javascript" src="tincanjs/TinCan.js"></script>
+		<script type="text/javascript" src="tincanjs/Utils.js"></script>
+		<script type="text/javascript" src="tincanjs/LRS.js"></script>
+		<script type="text/javascript" src="tincanjs/AgentAccount.js"></script>
+		<script type="text/javascript" src="tincanjs/Agent.js"></script>
+		<script type="text/javascript" src="tincanjs/Group.js"></script>
+		<script type="text/javascript" src="tincanjs/Verb.js"></script>
+		<script type="text/javascript" src="tincanjs/Result.js"></script>
+		<script type="text/javascript" src="tincanjs/Score.js"></script>
+		<script type="text/javascript" src="tincanjs/Context.js"></script>
+		<script type="text/javascript" src="tincanjs/Activity.js"></script>
+		<script type="text/javascript" src="tincanjs/InteractionComponent.js"></script>
+		<script type="text/javascript" src="tincanjs/ActivityDefinition.js"></script>
+		<script type="text/javascript" src="tincanjs/StatementRef.js"></script>
+		<script type="text/javascript" src="tincanjs/SubStatement.js"></script>
+		<script type="text/javascript" src="tincanjs/Statement.js"></script>
+		<script type="text/javascript" src="tincanjs/StatementsResult.js"></script>
+		<script type="text/javascript" src="tincanjs/State.js"></script>
+
 		
 		<!-- Base64 -->
 		<script src="http://tin-can-can.googlecode.com/files/base64.js"></script>
@@ -67,9 +85,12 @@
 		<!-- Right Click Support from Pipwerks -->
 		<script src="http://tin-can-can.googlecode.com/files/SWFRightClick.js"></script>
 		
+		<!-- generic functions used for capturing all or part of a statement with a web form (relies on certain HTML) -->
+		<script src="TinFormFunctions.js"></script>
+		
 		<!-- TinCanCan - main js file for this wrapper -->
 		<script src="TinCanCan.js"></script>
-		<!-- <script src="http://tin-can-can.googlecode.com/files/TinCanCan.js"></script>-->
+
 		
 		
 		
@@ -98,8 +119,9 @@
 			//They are included only as a backup if the user closes the window etc. 
 			//The Captivate Developer needs to provide an exit button or something that calls the CaptivateCompleted function.
 			//If this function is not called, inprogress will never be set to true. 
-			window.onbeforeunload = CaptivateCompleted;
-			window.onunload = CaptivateCompleted;
+			window.onbeforeunload = endSession;
+			window.onunload = endSession;
+		
 			
 		</script>
 
