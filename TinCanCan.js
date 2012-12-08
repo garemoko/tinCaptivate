@@ -16,18 +16,7 @@ GNU General Public License for more details.
 */
 
 
-/*============TODO: PULL THESE FROM XML==============*/
-var courseId = "example.com/exampleCaptivateTCAPI";
 
-var courseObj = {
-	"id":courseId,
-	"definition":{
-		"type":"Course", //This will always be "Course" for courseObj 
-		"name":{"en-US":"Captivate Example - Tin Can Course", "en-GB":"Captivate Example - Tin Can Course"},
-		"description":{"en-US":"This is a description of the course.","en-GB":"This is a description of the course."}
-	}
-};
-/*============END PULL FROM XML==============*/
 
 /*============SWF EMBED VARIABLES==============*/
 var strURLParams = "?SCORM_API=1.0&SCORM_TYPE=0",
@@ -50,15 +39,18 @@ var myTinCan = new TinCan();
 
 /*============CREATE LRS OBJECT==============*/
 
+//get the array of LRSes from the query string
 var LRSArray = getObjectFromQueryString('lrs');
 
+//For each LRS in that array...
 $.each(LRSArray,function(index){
+	//...make a new LRS object (some reformatting required)...
 	var myLRS = new TinCan.LRS({
 		endpoint: LRSArray[index].endpoint, 
 		version: "0.95",
 		auth: 'Basic ' + Base64.encode(LRSArray[index].login + ':' + LRSArray[index].pass)
 	});
-	
+	//...and add it to the Tin Can Object's library of record stores
 	myTinCan.recordStores[index] = myLRS;
 });
 
@@ -66,11 +58,85 @@ $.each(LRSArray,function(index){
 
 /*============CREATE ACTOR OBJECT==============*/
 
+//Get the actor object from the querystring and use it to define a TinCan Agent
 var myActor= new TinCan.Agent(getObjectFromQueryString('actor'));
+//Tell the Tin Can driver to use this agent (TODO: test what this actually does i.e. does it affect authority or is it just a default?)
 myTinCan.actor = myActor;
 
 /*============END CREATE ACTOR OBJECT==============*/
 
+/*============CREATE THE ACTIVTY OBJECT==============*/
+//TODO: PULL THESE VALUES FROM XML OR SOMETHING 
+//TODO: Add support for multiple languages
+var courseName = "Name of Captivate Course in trans-Atlantic English";
+var courseDesc = "Description of Captivate Course in trans-Atlantic English";
+var courseId = "http://example.com/exampleCaptivate";
+//END Pull for XML
+
+
+//Create the activity definition
+var captivateActivityDefinition = new TinCan.ActivityDefinition({
+	type : "http://adlnet.gov/expapi/activities/course",
+	name:  {
+		"en-US" : courseName,
+		"en-GB" : courseName
+	},
+	description: {
+		"en-US" : courseDesc,
+		"en-GB" : courseDesc
+	},
+});
+
+//Create the activity
+var myActivity = new TinCan.Activity({
+	id : courseId,
+	definition : myActivityDefinition
+});
+
+/*============END CREATE THE ACTIVTY OBJECT==============*/
+
+//TODO: ADD CONTEXT TO INCLUDE REVISION AND REGISTRATION AS A MINIMUM
+
+/*============CREATE PREDEFINED STATEMENT TEMPLATES==============*/
+//TODO: ADD RELEVANT RESULTS FOR EACH TEMPLATE
+
+//create a base statement
+	var baseStmt = new TinCan.Statement({
+		actor : myTinCan.actor,
+		target : deleteEmptyProperties(myActivity)
+	},true);
+
+//Declare statement Collection as a new Object to hold our template statements
+var statementsCollection = new Object();
+
+//For each verb, create an instance of the Tin Can Verb Object and add it to the collection for later use. 
+
+//attempted - an attempt has happened but the session ended before it was completed. 
+statementsCollection.attempted = baseStmt;
+statementsCollection.attempted.verb = getVerb("attempted", "http://adlnet.gov/expapi/verbs/");
+
+//completed - an attempted has been completed but we are making no assertions as to whether it was successful or not
+statementsCollection.completed = baseStmt;
+statementsCollection.completed.verb = getVerb("completed", "http://adlnet.gov/expapi/verbs/");
+
+//passed - an attempt has been completed successfully
+statementsCollection.passed = baseStmt;
+statementsCollection.passed.verb = getVerb("passed", "http://adlnet.gov/expapi/verbs/");
+
+//failed - an attempt has been completed but it was not sucecssful
+statementsCollection.failed = baseStmt;
+statementsCollection.failedv = getVerb("failed", "http://adlnet.gov/expapi/verbs/");
+
+//started - A session started
+statementsCollection.started = baseStmt;
+statementsCollection.started.verb = getVerb("started", "http://www.tincanapi.co.uk/wiki/verbs:");
+
+//stopped - A session ended
+statementsCollection.stopped = baseStmt;
+statementsCollection.stopped.verb = getVerb("stopped", "http://www.tincanapi.co.uk/wiki/verbs:");
+
+
+/*============END=============*/
 
 
 /*============CREATE CMI CACHE==============*/
@@ -113,6 +179,19 @@ TCDriver_SendStatement(tc_lrs, {"verb": "imported","object":courseObj});
 /*============END LAUNCH CODE==============*/
 
 /*===========================================FUNCTIONS ONLY PAST THIS POINT========================================================*/
+
+function getVerb(verb, library, display)
+{
+	display = typeof display == undefined ? verb : display;
+	return new TinCan.Verb({
+		id : library + verb,
+		display : {
+			"en-US" : display,
+			"en-GB" : display
+		}
+	});
+}
+
 
 function getObjectFromQueryString(objectToGet)
 {
