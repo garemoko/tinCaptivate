@@ -194,16 +194,12 @@ TinCan client library
                 this.verb = new TinCan.Verb (cfg.verb);
             }
             if (cfg.hasOwnProperty("target")) { 
-            	/* what does this section do???
-                
                 // TODO: check to see if already this type
                 if (typeof cfg.target.objectType === "undefined") {
                     cfg.target.objectType = "Activity";
                 }
-
                 if (cfg.target.objectType === "Activity") {
-                	alert (cfg.target.id);
-                    this.target = new TinCan.Activity (cfg.target);
+                    this.target = cfg.target; //new TinCan.Activity (cfg.target); //This line was caasing an error. Not sure why or indeed why it is needed. 
                 } else if (cfg.target.objectType === "Agent") {
                     this.target = new TinCan.Agent (cfg.target);
                 } else if (cfg.target.objectType === "SubStatement") {
@@ -213,7 +209,6 @@ TinCan client library
                 } else {
                     this.log("Unrecognized target type: " + cfg.target.objectType);
                 }
-                */ 
             }
             if (cfg.hasOwnProperty("result")) {
                 // TODO: check to see if already this type

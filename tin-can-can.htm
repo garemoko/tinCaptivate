@@ -55,7 +55,7 @@
 		<!-- swfobject -->
 		<script src="https://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js"></script>
 
-		<!-- jquery (Not currently used, but included because I'm sure it will be...) -->
+		<!-- jquery-->
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
 		
 		<!-- Rustici's Tin Can functions - call these to access the Tin Can API-->
@@ -119,8 +119,9 @@
 			//They are included only as a backup if the user closes the window etc. 
 			//The Captivate Developer needs to provide an exit button or something that calls the CaptivateCompleted function.
 			//If this function is not called, inprogress will never be set to true. 
-			window.onbeforeunload = CaptivateCompleted;
-			window.onunload = CaptivateCompleted;
+			window.onbeforeunload = endSession;
+			window.onunload = endSession;
+		
 			
 		</script>
 
