@@ -1,0 +1,82 @@
+body {
+	background: #d5d4d1;
+	text-align: left;
+	font-family: Calibri, Georgia, Serif;
+	width: 600px;
+	margin: auto;
+	
+}
+
+
+div {
+	margin: 0em;
+	padding: 0em;
+
+}
+.background_div {
+	margin: auto;
+	padding: 0px 0px;
+	height: 0px;
+	font-size: 14em;
+	text-align: center;
+	color: #d5d4d1;
+	z-index: -1;
+	font-family: serif;
+}
+.sevenEM {
+	font-size: 6em;
+	line-height: 1.8;
+}
+.section {
+	background: white;
+	padding: 0.1em 0em 1em 1em;
+	margin: 1em;
+	font-size: 1.3em;
+}
+.label {
+	text-align: right;
+	width: 150px;
+}
+.label_heading {
+	font-weight: bold;
+	font-size: 1.2em;
+	text-align: left;
+}
+table {
+	width: 100%;
+}
+input, select {
+	border: solid #A3BFB1 2px;
+	width: 90%;
+	min-height: 50px;
+}
+select, input{
+font-size: 1.1em;
+font-weight:bold;
+}
+
+.required {
+	border-color: #BF7777;
+	background-color: #F2cccc;
+}
+.buttonHolder {
+	text-align: center;
+}
+.button {
+	border-color: #AFA3BF;
+	max-width: 180px;
+	font-size: 1.5em;
+	font-weight: bold;
+	min-width: 120px;
+	min-height: 60px;
+	
+}
+.button:hover {
+
+	background-color: #DDCEF2;
+}
+
+.displayNone {
+	display: none;
+}
+

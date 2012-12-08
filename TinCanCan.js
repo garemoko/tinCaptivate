@@ -15,7 +15,8 @@ GNU General Public License for more details.
 <http://www.gnu.org/licenses/>.
 */
 
-/*============PULL FROM XML==============*/
+
+/*============TODO: PULL THESE FROM XML==============*/
 var courseId = "example.com/exampleCaptivateTCAPI";
 
 var courseObj = {
@@ -44,39 +45,31 @@ attemptCompleted = false, //value currently sent to LRS
 completionChanged = false; //used to track if the completion status has been chnaged but not yet reported. 
 /*============END OTHER GLOBAL VARIABLES==============*/
 
+//Create an instance of the Tin Can Library
+var myTinCan = new TinCan();
+
 /*============CREATE LRS OBJECT==============*/
-/* Hard coded for testing purposes only. Change these values every time you test. */
-var myTCVars = new Object();;
-myTCVars.endpoint = "https://cloud.scorm.com/ScormEngineInterface/TCAPI/public/";
-myTCVars.auth = 'Basic ' + Base64.encode("<account id>" + ':' + "<password>"); 
-myTCVars.actor = '{ "mbox":["mailto:dummy13@example.com"], "name":["steve jones"] }';
-/* END Hard coded for testing purposes only. */
 
-tc_lrs = My_GetLRSObject(); //Comment out this line to leave tc_lrs as the result of TCDriver_GetLRSObject();
+var LRSArray = getObjectFromQueryString('lrs');
 
-function My_GetLRSObject(){
-	var lrsProps = ["endpoint","auth","actor","registration","activity_id", "grouping", "activity_platform"];
-	var lrs = new Object();
-	var prop;
+$.each(LRSArray,function(index){
+	var myLRS = new TinCan.LRS({
+		endpoint: LRSArray[index].endpoint, 
+		version: "0.95",
+		auth: 'Basic ' + Base64.encode(LRSArray[index].login + ':' + LRSArray[index].pass)
+	});
 	
-	for (var i = 0; i<lrsProps.length; i++){
-		prop = lrsProps[i];
-		if (myTCVars[prop]){
-			lrs[prop] = myTCVars[prop];
-			delete myTCVars[prop];
-		}
-	}
-	if(lrs.endpoint === undefined || lrs.endpoint == "" || lrs.auth === undefined || lrs.auth == ""){
-		TCDriver_Log(lrs.endpoint + '//' + lrs.auth);
-		return null;
-	}
-	
-	lrs.extended = myTCVars;
-	
-	return lrs;
-}
+	myTinCan.recordStores[index] = myLRS;
+});
 
 /*============END CREATE LRS OBJECT==============*/
+
+/*============CREATE ACTOR OBJECT==============*/
+
+var myActor= new TinCan.Agent(getObjectFromQueryString('actor'));
+myTinCan.actor = myActor;
+
+/*============END CREATE ACTOR OBJECT==============*/
 
 
 
@@ -120,6 +113,23 @@ TCDriver_SendStatement(tc_lrs, {"verb": "imported","object":courseObj});
 /*============END LAUNCH CODE==============*/
 
 /*===========================================FUNCTIONS ONLY PAST THIS POINT========================================================*/
+
+function getObjectFromQueryString(objectToGet)
+{
+	var qString = $.getUrlVar(objectToGet);
+	
+	if (!(qString == undefined))
+	{
+		var objectToReturn = JSON.parse(urldecode(qString));
+		return objectToReturn;
+	}
+	else
+	{
+		return;
+	}
+}
+
+
 
 /*============DURATION FUNCTIONS==============*/
 function convertCMITimespanToSeconds(CMITimespan)
@@ -199,7 +209,7 @@ function TCCSendLessonData(inprogress, exiting)
 	if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) && (!(attemptCompleted)))
 	{
 		
-		endAttempt()
+		endAttempt();
 	
 	}
 	
@@ -207,7 +217,7 @@ function TCCSendLessonData(inprogress, exiting)
 	//note: a session may include multiple and/or partial attempts
 	if (((!(value_store["cmi.completion_status"] == "completed"))||(exiting=="true"))&&(!(attemptInProgress == inprogress)))
 	{
-		
+		sessionStatement();
 	}
 
 }

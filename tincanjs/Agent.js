@@ -1,0 +1,250 @@
+/*
+    Copyright 2012 Rustici Software
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+
+/**
+TinCan client library
+
+@module TinCan
+@submodule TinCan.Agent
+**/
+(function () {
+    "use strict";
+
+    /**
+    @class TinCan.Agent
+    @constructor
+    */
+    var Agent = TinCan.Agent = function (cfg) {
+        this.log("constructor");
+
+        /**
+        @property name
+        @type String
+        */
+        this.name = null;
+
+        /**
+        @property mbox
+        @type String
+        */
+        this.mbox = null;
+
+        /**
+        @property mbox_sha1sum
+        @type String
+        */
+        this.mbox_sha1sum = null;
+
+        /**
+        @property openid
+        @type Array
+        */
+        this.openid = null;
+
+        /**
+        @property account
+        @type TinCan.AgentAccount
+        */
+        this.account = null;
+
+        /**
+        @property degraded
+        @type Boolean
+        @default false
+        */
+        this.degraded = false;
+
+        this.init(cfg);
+    };
+    Agent.prototype = {
+        /**
+        @property objectType
+        @type String
+        @default Agent
+        */
+        objectType: "Agent",
+
+        /**
+        @property LOG_SRC
+        */
+        LOG_SRC: "Agent",
+
+        /**
+        @method log
+        */
+        log: TinCan.prototype.log,
+
+        /**
+        @method init
+        @param {Object} [options] Configuration used to initialize
+        */
+        init: function (cfg) {
+            this.log("init");
+            var i,
+                directProps = [
+                    "name",
+                    "mbox",
+                    "mbox_sha1sum",
+                    "openid"
+                ],
+                val
+            ;
+
+            cfg = cfg || {};
+
+            // handle .9 split names and array properties into single interface
+            if (typeof cfg.lastName !== "undefined" || typeof cfg.firstName !== "undefined") {
+                if (cfg.lastName.length > 1 || cfg.firstName.length > 1) {
+                    this.degraded = true;
+                }
+
+                cfg.name = cfg.firstName[0];
+                if (cfg.name !== "") {
+                    cfg.name += " ";
+                }
+                cfg.name += cfg.lastName[0];
+            } else if (typeof cfg.familyName !== "undefined" || typeof cfg.givenName !== "undefined") {
+                if (cfg.familyName.length > 1 || cfg.givenName.length > 1) {
+                    this.degraded = true;
+                }
+
+                cfg.name = cfg.givenName[0];
+                if (cfg.name !== "") {
+                    cfg.name += " ";
+                }
+                cfg.name += cfg.familyName[0];
+            }
+
+            if (typeof cfg.name === "object") {
+                if (cfg.name.length > 1) {
+                    this.degraded = true;
+                }
+                cfg.name = cfg.name[0];
+            }
+            if (typeof cfg.mbox === "object") {
+                if (cfg.mbox.length > 1) {
+                    this.degraded = true;
+                }
+                cfg.mbox = cfg.mbox[0];
+            }
+           if (cfg.mbox_sha1sum && (typeof cfg.mbox_sha1sum === "object")) {
+                if (cfg.mbox_sha1sum.length > 1) {
+                    this.degraded = true;
+                }
+                cfg.mbox_sha1sum = cfg.mbox_sha1sum[0];
+            }
+            if (cfg.openid && (typeof cfg.openid === "object")) {
+                if (cfg.openid.length > 1) {
+                    this.degraded = true;
+                }
+                cfg.openid = cfg.openid[0];
+            }
+            if (cfg.account)
+            {
+		        if (cfg.account.homePage && (typeof cfg.account === "object" && typeof cfg.account.homePage === "undefined") ){
+		            if (cfg.account.length === 0) {
+		                delete cfg.account;
+		            }
+		            else {
+		                if (cfg.account.length > 1) {
+		                    this.degraded = true;
+		                }
+		                cfg.account = cfg.account[0];
+		            }
+		        }
+            }
+
+            if (cfg.hasOwnProperty("account")) {
+                // TODO: check to see if already this type
+                this.account = new TinCan.AgentAccount (cfg.account);
+            }
+
+            for (i = 0; i < directProps.length; i += 1) {
+                if (cfg.hasOwnProperty(directProps[i]) && cfg[directProps[i]] !== null) {
+                    val = cfg[directProps[i]];
+                    if (directProps[i] === "mbox" && val.indexOf("mailto:") === -1) {
+                        val = "mailto:" + val;
+                    }
+                    this[directProps[i]] = val;
+                }
+            }
+        },
+
+        toString: function (lang) {
+            this.log("toString");
+
+            if (this.name !== null) {
+                return this.name;
+            }
+            if (this.mbox !== null) {
+                return this.mbox.replace("mailto:", "");
+            }
+            if (this.account !== null) {
+                return this.account.name;
+            }
+
+            return "";
+        },
+
+        /**
+        @method asVersion
+        @param {Object} [options]
+        @param {String} [options.version] Version to return (defaults to newest supported)
+        */
+        asVersion: function (version) {
+            this.log("asVersion: " + version);
+            var result = {
+                objectType: this.objectType
+            };
+
+            version = version || TinCan.versions()[0];
+
+            if (version === "0.90") {
+                if (this.mbox !== null) {
+                    result.mbox = [
+                        this.mbox
+                    ];
+                }
+                if (this.name !== null) {
+                    result.name = [
+                        this.name
+                    ];
+                }
+            } else {
+                if (this.mbox !== null) {
+                    result.mbox = this.mbox;
+                }
+                if (this.name !== null) {
+                    result.name = this.name;
+                }
+            }
+
+            return result;
+        }
+    };
+
+    /**
+    @method fromJSON
+    @return {Object} Agent
+    @static
+    */
+    Agent.fromJSON = function (agentJSON) {
+        Agent.prototype.log("fromJSON");
+        var _agent = JSON.parse(agentJSON);
+
+        return new Agent(_agent);
+    };
+}());
