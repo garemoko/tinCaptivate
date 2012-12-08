@@ -45,7 +45,7 @@ TinCan client library
 
         /**
         @property definition
-        @type Object
+        @type TinCan.ActivityDefinition
         */
         this.definition = null;
 
@@ -98,7 +98,7 @@ TinCan client library
             var defString = "";
 
             if (this.definition !== null) {
-                defString = this.definition.toString();
+                defString = this.definition.toString(lang);
                 if (defString !== "") {
                     return defString;
                 }

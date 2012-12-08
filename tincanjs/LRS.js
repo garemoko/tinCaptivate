@@ -57,6 +57,13 @@ TinCan client library
         this.allowFail = true;
 
         /**
+        @property alertOnRequestFailure
+        @type Boolean
+        @default true
+        */
+        this.alertOnRequestFailure = true;
+
+        /**
         @property extended
         @type Object
         */
@@ -99,7 +106,7 @@ TinCan client library
             cfg = cfg || {};
 
             if (! cfg.hasOwnProperty("endpoint")) {
-                if (env.isBrowser) {
+                if (env.isBrowser && this.alertOnRequestFailure) {
                     alert("[error] LRS invalid: no endpoint");
                 }
                 throw {
@@ -107,6 +114,7 @@ TinCan client library
                     mesg: "LRS invalid: no endpoint"
                 };
             }
+
             this.endpoint = cfg.endpoint;
 
             if (cfg.hasOwnProperty("allowFail")) {
@@ -144,10 +152,14 @@ TinCan client library
                     }
                     else {
                         if (cfg.allowFail) {
-                            alert("[warning] LRS invalid: cross domain request for differing scheme in IE");
+                            if (this.alertOnRequestFailure) {
+                                alert("[warning] LRS invalid: cross domain request for differing scheme in IE");
+                            }
                         }
                         else {
-                            alert("[error] LRS invalid: cross domain request for differing scheme in IE");
+                            if (this.alertOnRequestFailure) {
+                                alert("[error] LRS invalid: cross domain request for differing scheme in IE");
+                            }
                             throw {
                                 code: 2,
                                 mesg: "LRS invalid: cross domain request for differing scheme in IE"
@@ -164,18 +176,31 @@ TinCan client library
                 this.log("version: " + cfg.version);
                 this.version = cfg.version;
             }
+            else {
+                //
+                // assume max supported when not specified,
+                // TODO: add detection of LRS from call to endpoint
+                //
+                this.version = TinCan.versions()[0];
+            }
         },
 
         /**
+        Method used to send a request via browser objects to the LRS
+
         @method sendRequest
         @param {Object} [cfg] Configuration for request
             @param {String} [cfg.url] URL portion to add to endpoint
             @param {String} [cfg.method] GET, PUT, POST, etc.
             @param {Object} [cfg.params] Parameters to set on the querystring
             @param {String} [cfg.data] String of body content
-            @param {Function} [cfg.callback] Function to run at completion
-            @param {Boolean} [cfg.ignore404] Whether 404 status codes should be ignored
             @param {Object} [cfg.headers] Additional headers to set in the request
+            @param {Function} [cfg.callback] Function to run at completion
+                @param {String|Null} cfg.callback.err If an error occurred, this parameter will contain the HTTP status code.
+                    If the operation succeeded, err will be null.
+                @param {Object} cfg.callback.xhr XHR object
+            @param {Boolean} [cfg.ignore404] Whether 404 status codes should be considered an error
+        @return {Object} XHR if called in a synchronous way (in other words no callback)
         */
         sendRequest: function (cfg) {
             this.log("sendRequest");
@@ -192,6 +217,11 @@ TinCan client library
                 self = this
             ;
 
+            // respect absolute URLs passed in
+            if (cfg.url.indexOf("http") === 0) {
+                fullUrl = cfg.url;
+            }
+
             // add extended LMS-specified values to the params
             if (this.extended !== null) {
                 for (prop in this.extended) {
@@ -207,7 +237,7 @@ TinCan client library
             // consolidate headers
             headers["Content-Type"] = "application/json";
             headers.Authorization = this.auth;
-            if (this.version !== "0.90") {
+            if (this.version !== "0.9") {
                 headers["X-Experience-API-Version"] = this.version;
             }
 
@@ -230,7 +260,7 @@ TinCan client library
                 }
 
                 xhr = new XMLHttpRequest();
-                xhr.open(cfg.method, fullUrl, cfg.callback !== undefined);
+                xhr.open(cfg.method, fullUrl, (typeof cfg.callback !== "undefined"));
                 for (prop in headers) {
                     if (headers.hasOwnProperty(prop)) {
                         xhr.setRequestHeader(prop, headers[prop]);
@@ -273,7 +303,7 @@ TinCan client library
                 this.log("sendRequest unrecognized _requestMode: " + this._requestMode);
             }
 
-            //Setup request callback
+            // Setup request callback
             function requestComplete () {
                 self.log("requestComplete: " + finished + ", xhr.status: " + xhr.status);
                 var notFoundOk;
@@ -287,19 +317,31 @@ TinCan client library
                     notFoundOk = (cfg.ignore404 && xhr.status === 404);
                     if (xhr.status === undefined || (xhr.status >= 200 && xhr.status < 400) || notFoundOk) {
                         if (cfg.callback) {
-                            cfg.callback(xhr);
+                            cfg.callback(null, xhr);
                         }
                         else {
-                            requestCompleteResult = xhr;
-                            return xhr;
+                            requestCompleteResult = {
+                                err: null,
+                                xhr: xhr
+                            };
+                            return requestCompleteResult;
                         }
                     }
                     else {
                         // Alert all errors except cancelled XHR requests
                         if (xhr.status > 0) {
-                            alert("[warning] There was a problem communicating with the Learning Record Store. (" + xhr.status + " | " + xhr.responseText+ ")");
+                            requestCompleteResult = {
+                                err: xhr.status,
+                                xhr: xhr
+                            };
+                            if (self.alertOnRequestFailure) {
+                                alert("[warning] There was a problem communicating with the Learning Record Store. (" + xhr.status + " | " + xhr.responseText+ ")");
+                            }
+                            if (cfg.callback) {
+                                cfg.callback(xhr.status, xhr);
+                            }
                         }
-                        return xhr;
+                        return requestCompleteResult;
                     }
                 }
                 else {
@@ -323,7 +365,7 @@ TinCan client library
                 if (this._requestMode === IE) {
                     // synchronous call in IE, with no synchronous mode available
                     until = 1000 + Date.now();
-                    this.log("sendRequest: until: " + until + ", finished: " + finished);
+                    this.log("sendRequest - until: " + until + ", finished: " + finished);
 
                     while (Date.now() < until && ! finished) {
                         //this.log("calling __delay");
@@ -332,6 +374,14 @@ TinCan client library
                 }
                 return requestComplete();
             }
+
+            //
+            // for async requests give them the XHR object directly
+            // as the return value, the actual stuff they should be
+            // caring about is params to the callback, for sync
+            // requests they got the return value above
+            //
+            return xhr;
         },
 
         /**
@@ -350,24 +400,24 @@ TinCan client library
             // TODO: it would be better to make a subclass that knows
             //       its own environment and just implements the protocol
             //       that it needs to
-            if (TinCan.environment().isBrowser) {
-                requestCfg = {
-                    url: "statements",
-                    method: "PUT",
-                    params: {
-                        statementId: stmt.id
-                    },
-                    data: JSON.stringify(stmt.asVersion( this.version ))
-                };
-                if (typeof cfg.callback !== "undefined") {
-                    requestCfg.callback = cfg.callback;
-                }
-
-                this.sendRequest(requestCfg);
-            }
-            else {
+            if (! TinCan.environment().isBrowser) {
                 this.log("error: environment not implemented");
+                return;
             }
+
+            requestCfg = {
+                url: "statements",
+                method: "PUT",
+                params: {
+                    statementId: stmt.id
+                },
+                data: JSON.stringify(stmt.asVersion( this.version ))
+            };
+            if (typeof cfg.callback !== "undefined") {
+                requestCfg.callback = cfg.callback;
+            }
+
+            return this.sendRequest(requestCfg);
         },
 
         /**
@@ -381,32 +431,47 @@ TinCan client library
         */
         retrieveStatement: function (stmtId, cfg) {
             this.log("retrieveStatement");
-            var callbackWrapper;
-
-            callbackWrapper = function () {
-                var statement;
-
-                cfg.callback(statement);
-            };
+            var requestCfg,
+                requestResult,
+                callbackWrapper;
 
             // TODO: it would be better to make a subclass that knows
             //       its own environment and just implements the protocol
             //       that it needs to
             if (TinCan.environment().isBrowser) {
-                this.sendRequest(
-                    {
-                        url: "statements",
-                        method: "GET",
-                        params: {
-                            statementId: stmtId
-                        }
-                        //callback: cfg.callback
-                    }
-                );
-            }
-            else {
                 this.log("error: environment not implemented");
+                return;
             }
+
+            requestCfg = {
+                url: "statements",
+                method: "GET",
+                params: {
+                    statementId: stmtId
+                }
+            };
+            if (typeof cfg.callback !== "undefined") {
+                callbackWrapper = function (err, xhr) {
+                    var result = xhr;
+
+                    if (err === null) {
+                        result = TinCan.Statement.fromJSON(xhr.responseText);
+                    }
+
+                    cfg.callback(err, result);
+                };
+                requestCfg.callback = callbackWrapper;
+            }
+
+            requestResult = this.sendRequest(requestCfg);
+            if (! callbackWrapper) {
+                requestResult.statement = null;
+                if (requestResult.err === null) {
+                    requestResult.statement = TinCan.Statement.fromJSON(requestResult.xhr.responseText);
+                }
+            }
+
+            return requestResult;
         },
 
         /**
@@ -425,6 +490,14 @@ TinCan client library
                 i
             ;
 
+            // TODO: it would be better to make a subclass that knows
+            //       its own environment and just implements the protocol
+            //       that it needs to
+            if (! TinCan.environment().isBrowser) {
+                this.log("error: environment not implemented");
+                return;
+            }
+
             cfg = cfg || {};
 
             if (stmts.length > 0) {
@@ -434,24 +507,16 @@ TinCan client library
                     );
                 }
 
-                // TODO: it would be better to make a subclass that knows
-                //       its own environment and just implements the protocol
-                //       that it needs to
-                if (TinCan.environment().isBrowser) {
-                    requestCfg = {
-                        url: "statements",
-                        method: "POST",
-                        data: JSON.stringify(versionedStatements)
-                    };
-                    if (typeof cfg.callback !== "undefined") {
-                        requestCfg.callback = cfg.callback;
-                    }
+                requestCfg = {
+                    url: "statements",
+                    method: "POST",
+                    data: JSON.stringify(versionedStatements)
+                };
+                if (typeof cfg.callback !== "undefined") {
+                    requestCfg.callback = cfg.callback;
+                }
 
-                    this.sendRequest(requestCfg);
-                }
-                else {
-                    this.log("error: environment not implemented");
-                }
+                return this.sendRequest(requestCfg);
             }
         },
 
@@ -475,8 +540,9 @@ TinCan client library
                 @param {Boolean} [cfg.params.sparse] Get sparse results
                 @param {Boolean} [cfg.params.ascending] Return results in ascending order of stored time
             @param {Function} [cfg.callback] Callback to execute on completion
-                @param {TinCan.StatementsResult} cfg.callback.response Receives a StatementsResult argument
-        @return {TinCan.StatementsResult} StatementsResult object if no callback configured
+                @param {String|null} cfg.callback.err Error status or null if succcess
+                @param {TinCan.StatementsResult|XHR} cfg.callback.response Receives a StatementsResult argument
+        @return {Object} Request result
         */
         queryStatements: function (cfg) {
             this.log("queryStatements");
@@ -502,21 +568,29 @@ TinCan client library
             requestCfg = this._queryStatementsRequestCfg(cfg);
 
             if (typeof cfg.callback !== "undefined") {
-                callbackWrapper = function (xhr) {
-                    var stResult = TinCan.StatementsResult.fromJSON(xhr.responseText);
+                callbackWrapper = function (err, xhr) {
+                    var result = xhr;
 
-                    cfg.callback(stResult);
+                    if (err === null) {
+                        result = TinCan.StatementsResult.fromJSON(xhr.responseText);
+                    }
+
+                    cfg.callback(err, result);
                 };
                 requestCfg.callback = callbackWrapper;
             }
 
             requestResult = this.sendRequest(requestCfg);
+            requestResult.config = requestCfg;
 
-            if (typeof requestCfg.callback === "undefined") {
-                return TinCan.StatementsResult.fromJSON(requestResult.responseText);
+            if (! callbackWrapper) {
+                requestResult.statementsResult = null;
+                if (requestResult.err === null) {
+                    requestResult.statementsResult = TinCan.StatementsResult.fromJSON(requestResult.xhr.responseText);
+                }
             }
 
-            return requestCfg;
+            return requestResult;
         },
 
         /**
@@ -524,7 +598,7 @@ TinCan client library
 
         @method _queryStatementsRequestCfg
         @private
-        @param {Object} [cfg] See configuration for queryStatements()
+        @param {Object} [cfg] See configuration for {{#crossLink "TinCan.LRS/queryStatements"}}{{/crossLink}}
         @return {Object} Request configuration object
         */
         _queryStatementsRequestCfg: function (cfg) {
@@ -582,15 +656,17 @@ TinCan client library
         @param {Object} [cfg] Configuration used to query
             @param {String} [cfg.url] More URL
             @param {Function} [cfg.callback] Callback to execute on completion
-                @param {TinCan.StatementsResult} cfg.callback.response Receives a StatementsResult argument
-        @return {TinCan.StatementsResult} StatementsResult object if no callback configured
+                @param {String|null} cfg.callback.err Error status or null if succcess
+                @param {TinCan.StatementsResult|XHR} cfg.callback.response Receives a StatementsResult argument
+        @return {Object} Request result
         */
         moreStatements: function (cfg) {
             this.log("moreStatements: " + cfg.url);
             var requestCfg,
                 requestResult,
                 callbackWrapper,
-                parsedURL;
+                parsedURL,
+                serverRoot;
 
             // TODO: it would be better to make a subclass that knows
             //       its own environment and just implements the protocol
@@ -606,25 +682,50 @@ TinCan client library
             // the more URL query params so that the request can be made properly later
             parsedURL = TinCan.Utils.parseURL(cfg.url);
 
+            //Respect a more URL that is relative to either the server root 
+            //or endpoint (though only the former is allowed in the spec)
+            serverRoot = TinCan.Utils.getServerRoot(this.endpoint);
+            if (parsedURL.path.indexOf("/statements") === 0){
+                parsedURL.path = this.endpoint.replace(serverRoot, '') + parsedURL.path;
+                this.log("converting non-standard more URL to " + parsedURL.path);
+            }
+
+            //The more relative URL might not start with a slash, add it if not
+            if (parsedURL.path.indexOf("/") !== 0) {
+                parsedURL.path = "/" + parsedURL.path;
+            }
+
             requestCfg = {
                 method: "GET",
-                url: parsedURL.path,
+                //For arbitrary more URLs to work, 
+                //we need to make the URL absolute here
+                url: serverRoot + parsedURL.path,
                 params: parsedURL.params
             };
             if (typeof cfg.callback !== "undefined") {
-                callbackWrapper = function (xhr) {
-                    var stResult = TinCan.StatementsResult.fromJSON(xhr.responseText);
+                callbackWrapper = function (err, xhr) {
+                    var result = xhr;
 
-                    cfg.callback(stResult);
+                    if (err === null) {
+                        result = TinCan.StatementsResult.fromJSON(xhr.responseText);
+                    }
+
+                    cfg.callback(err, result);
                 };
                 requestCfg.callback = callbackWrapper;
             }
 
             requestResult = this.sendRequest(requestCfg);
+            requestResult.config = requestCfg;
 
-            if (typeof requestCfg.callback === "undefined") {
-                return TinCan.StatementsResult.fromJSON(requestResult.responseText);
+            if (! callbackWrapper) {
+                requestResult.statementsResult = null;
+                if (requestResult.err === null) {
+                    requestResult.statementsResult = TinCan.StatementsResult.fromJSON(requestResult.xhr.responseText);
+                }
             }
+
+            return requestResult;
         },
 
         /**
@@ -633,17 +734,20 @@ TinCan client library
         @method retrieveState
         @param {String} key Key of state to retrieve
         @param {Object} cfg Configuration options
-            @param {Object} activity TinCan.Activity
-            @param {Object} actor TinCan.Actor
-            @param {String} [registration] Registration
+            @param {Object} cfg.activity TinCan.Activity
+            @param {Object} cfg.agent TinCan.Agent
+            @param {String} [cfg.registration] Registration
             @param {Function} [cfg.callback] Callback to execute on completion
-        @return {Object} TinCan.State retrieved
+                @param {Object|Null} cfg.callback.error
+                @param {TinCan.State|null} cfg.callback.result null if state is 404
+        @return {Object} TinCan.State retrieved when synchronous, or result from sendRequest
         */
         retrieveState: function (key, cfg) {
             this.log("retrieveState");
             var requestParams = {},
                 requestCfg = {},
-                requestResult
+                requestResult,
+                callbackWrapper
             ;
 
             // TODO: it would be better to make a subclass that knows
@@ -656,9 +760,14 @@ TinCan client library
 
             requestParams = {
                 stateId: key,
-                activityId: cfg.activity.id,
-                actor: JSON.stringify(cfg.actor.asVersion(this.version))
+                activityId: cfg.activity.id
             };
+            if (this.version === "0.9") {
+                requestParams.actor = JSON.stringify(cfg.agent.asVersion(this.version));
+            }
+            else {
+                requestParams.agent = JSON.stringify(cfg.agent.asVersion(this.version));
+            }
             if (typeof cfg.registration !== "undefined") {
                 requestParams.registrationId = cfg.registration;
             }
@@ -666,28 +775,58 @@ TinCan client library
             requestCfg = {
                 url: "activities/state",
                 method: "GET",
-                params: requestParams
+                params: requestParams,
+                ignore404: true
             };
             if (typeof cfg.callback !== "undefined") {
-                requestCfg.callback = cfg.callback;
+                callbackWrapper = function (err, xhr) {
+                    var result = xhr;
+
+                    if (err === null) {
+                        if (xhr.status === 404) {
+                            result = null;
+                        }
+                        else {
+                            result = new TinCan.State(
+                                {
+                                    id: key,
+                                    contents: xhr.responseText
+                                }
+                            );
+                        }
+                    }
+
+                    cfg.callback(err, result);
+                };
+                requestCfg.callback = callbackWrapper;
             }
 
             requestResult = this.sendRequest(requestCfg);
+            if (! callbackWrapper) {
+                requestResult.state = null;
+                if (requestResult.err === null && requestResult.xhr.status !== 404) {
+                    requestResult.state = new TinCan.State(
+                        {
+                            id: key,
+                            contents: requestResult.xhr.responseText
+                        }
+                    );
+                }
+            }
 
-            // TODO: need to convert into a TinCan.State object
-            // TODO: this seems like a bad interface decision
-            return requestResult.responseText;
+            return requestResult;
         },
 
         /**
         Save a state value, when used from a browser sends to the endpoint using the RESTful interface.
 
         @method saveState
-        @param {String} key Key of state to retrieve
+        @param {String} key Key of state to save
+        @param {String} val Value of state to save
         @param {Object} cfg Configuration options
-            @param {Object} activity TinCan.Activity
-            @param {Object} actor TinCan.Actor
-            @param {String} registration Registration
+            @param {Object} cfg.activity TinCan.Activity
+            @param {Object} cfg.agent TinCan.Agent
+            @param {String} [cfg.registration] Registration
             @param {Function} [cfg.callback] Callback to execute on completion
         */
         saveState: function (key, val, cfg) {
@@ -711,9 +850,14 @@ TinCan client library
 
             requestParams = {
                 stateId: key,
-                activityId: cfg.activity.id,
-                actor: JSON.stringify(cfg.actor.asVersion(this.version))
+                activityId: cfg.activity.id
             };
+            if (this.version === "0.9") {
+                requestParams.actor = JSON.stringify(cfg.agent.asVersion(this.version));
+            }
+            else {
+                requestParams.agent = JSON.stringify(cfg.agent.asVersion(this.version));
+            }
             if (typeof cfg.registration !== "undefined") {
                 requestParams.registrationId = cfg.registration;
             }
@@ -728,11 +872,7 @@ TinCan client library
                 requestCfg.callback = cfg.callback;
             }
 
-            requestResult = this.sendRequest(requestCfg);
-
-            // TODO: need to convert into a TinCan.State object
-            // TODO: this seems like a bad interface decision
-            return requestResult.responseText;
+            return this.sendRequest(requestCfg);
         },
 
         /**
@@ -741,9 +881,9 @@ TinCan client library
         @method dropState
         @param {String|null} key Key of state to delete, or null for all
         @param {Object} cfg Configuration options
-            @param {Object} activity TinCan.Activity
-            @param {Object} actor TinCan.Actor
-            @param {String} [registration] Registration
+            @param {Object} [cfg.activity] TinCan.Activity
+            @param {Object} [cfg.agent] TinCan.Agent
+            @param {String} [cfg.registration] Registration
             @param {Function} [cfg.callback] Callback to execute on completion
         */
         dropState: function (key, cfg) {
@@ -761,9 +901,14 @@ TinCan client library
             }
 
             requestParams = {
-                activityId: cfg.activity.id,
-                actor: JSON.stringify(cfg.actor.asVersion(this.version))
+                activityId: cfg.activity.id
             };
+            if (this.version === "0.9") {
+                requestParams.actor = JSON.stringify(cfg.agent.asVersion(this.version));
+            }
+            else {
+                requestParams.agent = JSON.stringify(cfg.agent.asVersion(this.version));
+            }
             if (key !== null) {
                 requestParams.stateId = key;
             }
@@ -780,7 +925,7 @@ TinCan client library
                 requestCfg.callback = cfg.callback;
             }
 
-            this.sendRequest(requestCfg);
+            return this.sendRequest(requestCfg);
         },
 
         /**
@@ -789,9 +934,7 @@ TinCan client library
         @method retrieveActivityProfile
         @param {String} key Key of activity profile to retrieve
         @param {Object} cfg Configuration options
-            @param {Object} activity TinCan.Activity
-            @param {Object} actor TinCan.Actor
-            @param {String} [registration] Registration
+            @param {Object} cfg.activity TinCan.Activity
             @param {Function} [cfg.callback] Callback to execute on completion
         @return {Object} Value retrieved
         */
@@ -821,10 +964,7 @@ TinCan client library
                 requestCfg.callback = cfg.callback;
             }
 
-            requestResult = this.sendRequest(requestCfg);
-
-            // TODO: this seems like a bad interface decision
-            return requestResult.responseText;
+            return this.sendRequest(requestCfg);
         },
 
         /**
@@ -833,7 +973,7 @@ TinCan client library
         @method saveActivityProfile
         @param {String} key Key of activity profile to retrieve
         @param {Object} cfg Configuration options
-            @param {Object} activity TinCan.Activity
+            @param {Object} cfg.activity TinCan.Activity
             @param {Function} [cfg.callback] Callback to execute on completion
         */
         saveActivityProfile: function (key, val, cfg) {
@@ -865,7 +1005,7 @@ TinCan client library
                 requestCfg.callback = cfg.callback;
             }
 
-            this.sendRequest(requestCfg);
+            return this.sendRequest(requestCfg);
         },
 
         /**
@@ -874,7 +1014,7 @@ TinCan client library
         @method dropActivityProfile
         @param {String|null} key Key of activity profile to delete, or null for all
         @param {Object} cfg Configuration options
-            @param {Object} activity TinCan.Activity
+            @param {Object} cfg.activity TinCan.Activity
             @param {Function} [cfg.callback] Callback to execute on completion
         */
         dropActivityProfile: function (key, cfg) {
@@ -907,10 +1047,13 @@ TinCan client library
                 requestCfg.callback = cfg.callback;
             }
 
-            this.sendRequest(requestCfg);
+            return this.sendRequest(requestCfg);
         },
 
         /**
+        Non-environment safe method used to create a delay to give impression
+        of synchronous response
+
         @method __delay
         @private
         */

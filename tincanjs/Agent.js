@@ -107,25 +107,43 @@ TinCan client library
 
             // handle .9 split names and array properties into single interface
             if (typeof cfg.lastName !== "undefined" || typeof cfg.firstName !== "undefined") {
-                if (cfg.lastName.length > 1 || cfg.firstName.length > 1) {
-                    this.degraded = true;
+                cfg.name = "";
+                if (typeof cfg.firstName !== "undefined" && cfg.firstName.length > 0) {
+                    cfg.name = cfg.firstName[0];
+                    if (cfg.firstName.length > 1) {
+                        this.degraded = true;
+                    }
                 }
 
-                cfg.name = cfg.firstName[0];
                 if (cfg.name !== "") {
                     cfg.name += " ";
                 }
-                cfg.name += cfg.lastName[0];
+
+                if (typeof cfg.lastName !== "undefined" && cfg.lastName.length > 0) {
+                    cfg.name += cfg.lastName[0];
+                    if (cfg.lastName.length > 1) {
+                        this.degraded = true;
+                    }
+                }
             } else if (typeof cfg.familyName !== "undefined" || typeof cfg.givenName !== "undefined") {
-                if (cfg.familyName.length > 1 || cfg.givenName.length > 1) {
-                    this.degraded = true;
+                cfg.name = "";
+                if (typeof cfg.givenName !== "undefined" && cfg.givenName.length > 0) {
+                    cfg.name = cfg.givenName[0];
+                    if (cfg.givenName.length > 1) {
+                        this.degraded = true;
+                    }
                 }
 
-                cfg.name = cfg.givenName[0];
                 if (cfg.name !== "") {
                     cfg.name += " ";
                 }
-                cfg.name += cfg.familyName[0];
+
+                if (typeof cfg.familyName !== "undefined" && cfg.familyName.length > 0) {
+                    cfg.name += cfg.familyName[0];
+                    if (cfg.familyName.length > 1) {
+                        this.degraded = true;
+                    }
+                }
             }
 
             if (typeof cfg.name === "object") {
@@ -134,13 +152,13 @@ TinCan client library
                 }
                 cfg.name = cfg.name[0];
             }
-            if (typeof cfg.mbox === "object") {
+            if (cfg.mbox && (typeof cfg.mbox === "object")) {
                 if (cfg.mbox.length > 1) {
                     this.degraded = true;
                 }
                 cfg.mbox = cfg.mbox[0];
             }
-           if (cfg.mbox_sha1sum && (typeof cfg.mbox_sha1sum === "object")) {
+            if (cfg.mbox_sha1sum && (typeof cfg.mbox_sha1sum === "object")) {
                 if (cfg.mbox_sha1sum.length > 1) {
                     this.degraded = true;
                 }
@@ -212,7 +230,7 @@ TinCan client library
 
             version = version || TinCan.versions()[0];
 
-            if (version === "0.90") {
+            if (version === "0.9") {
                 if (this.mbox !== null) {
                     result.mbox = [
                         this.mbox

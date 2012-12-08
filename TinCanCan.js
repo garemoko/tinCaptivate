@@ -90,15 +90,17 @@ var captivateActivityDefinition = new TinCan.ActivityDefinition({
 //Create the activity
 var myActivity = new TinCan.Activity({
 	id : courseId,
-	definition : myActivityDefinition
+	definition : captivateActivityDefinition
 });
+
+//Tell the Tin Can driver to use this activity for all statements
+TinCan.Activity = myActivity;
 
 /*============END CREATE THE ACTIVTY OBJECT==============*/
 
 //TODO: ADD CONTEXT TO INCLUDE REVISION AND REGISTRATION AS A MINIMUM
 
 /*============CREATE PREDEFINED STATEMENT TEMPLATES==============*/
-//TODO: ADD RELEVANT RESULTS FOR EACH TEMPLATE
 
 //create a base statement
 	var baseStmt = new TinCan.Statement({
@@ -114,18 +116,22 @@ var statementsCollection = new Object();
 //attempted - an attempt has happened but the session ended before it was completed. 
 statementsCollection.attempted = baseStmt;
 statementsCollection.attempted.verb = getVerb("attempted", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.attempted.result=getResult(false);
 
 //completed - an attempted has been completed but we are making no assertions as to whether it was successful or not
 statementsCollection.completed = baseStmt;
 statementsCollection.completed.verb = getVerb("completed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.completed.result =getResult(true);
 
 //passed - an attempt has been completed successfully
 statementsCollection.passed = baseStmt;
 statementsCollection.passed.verb = getVerb("passed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.passed.result = getResult(true, true);
 
 //failed - an attempt has been completed but it was not sucecssful
 statementsCollection.failed = baseStmt;
-statementsCollection.failedv = getVerb("failed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.failed.verb = getVerb("failed", "http://adlnet.gov/expapi/verbs/");
+statementsCollection.failed.result = getResult(true, false);
 
 //started - A session started
 statementsCollection.started = baseStmt;
@@ -138,6 +144,15 @@ statementsCollection.stopped.verb = getVerb("stopped", "http://www.tincanapi.co.
 
 /*============END=============*/
 
+/*============SET STATE SETTINGS==============*/
+var stateCfg = {
+	actor: TinCan.Agent,
+	activity: TinCan.Activity
+}
+
+//myTinCan.getState(key, stateCfg);
+
+/*============END=============*/
 
 /*============CREATE CMI CACHE==============*/
 var cmiCacheResultChanged = false; //if true, we have new data to send to the LRS
@@ -171,14 +186,29 @@ var cmiCache = function(property, value){
 
 //Get the duration from the state if it exists (default "" which we interpret as "PT0H0M0S") and save it for later comparision. 
 var startDuration = TCCGetState("cmi.total_time"); //must be called AFTER the LRS object has been created 
-			
-//Send an imported statement to set the course data
-TCDriver_SendStatement(tc_lrs, {"verb": "imported","object":courseObj});
-
+sessionStatement(true);
 
 /*============END LAUNCH CODE==============*/
 
 /*===========================================FUNCTIONS ONLY PAST THIS POINT========================================================*/
+
+function getResult(completion,success)
+{
+	
+	if (typeof success == undefined)
+	{
+		return new TinCan.Result({
+			completion : completion,
+		});
+	}
+	else
+	{
+		return new TinCan.Result({
+			completion : completion,
+			success : success
+		});
+	}
+}
 
 function getVerb(verb, library, display)
 {
@@ -259,7 +289,7 @@ function convertSecondsToCMITimespan(inputSeconds)
 function addDurations(value_one,value_two)
 {
 	var duration = convertSecondsToCMITimespan(convertCMITimespanToSeconds(value_one) + convertCMITimespanToSeconds(value_two));
-	TCDriver_SetState(tc_lrs, courseId, "cmi.total_time", duration);
+	myTinCan.setState("cmi.total_time", duration, stateCfg);
 	return duration;
 }
 
@@ -271,7 +301,7 @@ function diffDurations(largeValue,smallValue)
 
 function resetClock() //reset the duration timer to zero
 {
-    TCDriver_SetState(tc_lrs, courseId, "cmi.total_time", "PTHM0S");
+	myTinCan.setState("cmi.total_time", "PTHM0S", stateCfg);
 	startDuration = "PTHM0S";
 };
 
@@ -287,7 +317,7 @@ function TCCSendLessonData(inprogress, exiting)
 	//Send completed, passed, failed or attempted statement at end of attempt
 	if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) && (!(attemptCompleted)))
 	{
-		
+		alert('statement');
 		endAttempt();
 	
 	}
@@ -296,7 +326,8 @@ function TCCSendLessonData(inprogress, exiting)
 	//note: a session may include multiple and/or partial attempts
 	if (((!(value_store["cmi.completion_status"] == "completed"))||(exiting=="true"))&&(!(attemptInProgress == inprogress)))
 	{
-		sessionStatement();
+		
+		sessionStatement(inprogress);
 	}
 
 }
@@ -304,81 +335,66 @@ function TCCSendLessonData(inprogress, exiting)
 
 function endAttempt()
 {
-	var stmt;
-	
-	//Send lesson data statement
-	var verb  = "attempted"; 
-	var success = false;
-	
-	//Duration is updated in the state every time Captivate passes it so we just need to pull it out the state when it is time to report a statement.  
-	var duration = TCCGetState("cmi.total_time");
-		
+	var stmtToSend;		
 	
 	if (value_store["cmi.success_status"] == "passed")
 	{
-		verb = "passed";
-		success = true;
+		stmtToSend = statementsCollection.passed
 	}
 	else if (value_store["cmi.success_status"] == "failed")
 	{
-		verb = "failed";
-		success = false;
+		stmtToSend = statementsCollection.failed
 	}
-	else if (value_store["cmi.success_status"] == "unknown")
+	else 
 	{
-		verb = "completed";
-		success = true;
+		if (value_store["cmi.completion_status"] == "completed")
+		{
+			stmtToSend = statementsCollection.completed
+		}
+		else
+		{
+			stmtToSend = statementsCollection.attempted
+		}
 	}
-	var completion = true;
-	if (!(value_store["cmi.completion_status"] == "completed"))
-	{
-		verb = "attempted";
-		completion = false;
-	}
+	
+	//Set the score, if present
+	stmtToSend.result.score.scaled = value_store["cmi.score.scaled"];
+	stmtToSend.result.score.raw = value_store["cmi.score.raw"];
+	stmtToSend.result.score.min = value_store["cmi.score.min"];
+	stmtToSend.result.score.max = value_store["cmi.score.max"];
+	stmtToSend.result.score = deleteEmptyProperties(stmtToSend.result.score);
+	
+	//Set the Duration
+	stmtToSend.result.duration = TCCGetState("cmi.total_time");
+	
+	//Send the statement, no callback
+	myTinCan.sendStatement(stmtToSend, function() {});
 		
-		stmt = 
-		{ 
-			"verb": verb,
-			"inProgress":false,
-			"object":{"id":courseId},
-			"result":
-			{
-				"score":
-				{
-					"scaled":value_store["cmi.score.scaled"],
-					"raw":value_store["cmi.score.raw"],
-					"min":value_store["cmi.score.min"],
-					"max":value_store["cmi.score.max"]
-				},
-				"success":success,
-				"completion":completion,
-				"duration":duration
-			}
-		};
-		TCDriver_Log(stmt);
-		TCDriver_SendStatement(tc_lrs, stmt);
-		attemptCompleted = true; //Only send this success data once. 
-		//reset the clock. Note: this means slides after the completed attempt but before learner restarts are counted towards next attempt
-		resetClock();
+	attemptCompleted = true; //Only send this success data once. 
+	//reset the clock. Note: this means slides after the completed attempt but before learner restarts are counted towards next attempt
+	resetClock();
 }
 
-function sessionStatement()
-{
-	var stmt;
+function sessionStatement(inprogress)
+{alert('statement');
+
+	var stmtToSend;
     var sessionDuration = value_store["cmi.session_time"];
     if (sessionDuration == "")
     {sessionDuration= "PTHM0S"}
-
-	attemptInProgress = inprogress; //reset if the user retakes quiz
-	stmt = 
-	{ 
-		"verb": "experienced",
-		"inProgress":inprogress, //false for end of session, true for start of session
-		"object":{"id":courseId},
-		"result": { "duration": sessionDuration }
-	};
-	TCDriver_Log(stmt);
-	TCDriver_SendStatement(tc_lrs, stmt);
+    
+    if (inprogress)
+    {
+    	stmtToSend = statementsCollection.started;
+    }
+    else
+    {
+    	stmtToSend = statementsCollection.stopped;
+    	stmtToSend.result.duration = sessionDuration;
+    }
+    
+	//Send the statement, no callback
+	myTinCan.sendStatement(stmtToSend, function() {});
 }
 
 
@@ -444,14 +460,14 @@ function TCCSendInteractionData(interactionIndex)
 			"response": value_store["cmi.interactions." + interactionIndex + ".learner_response"],
 			"duration": value_store["cmi.interactions." + interactionIndex + ".latency"],
 			"score" : { "raw" : interactionScore}
-		},
+		}, 
 		"timestamp": convertSecondsToCMITimespan(value_store["cmi.interactions." + interactionIndex + ".timestamp"])
 	};
 	
 	
-	
-	TCDriver_Log(stmt);
-	TCDriver_SendStatement(tc_lrs, stmt);
+	//Don't send interaction statements for now...
+	//TCDriver_Log(stmt);
+	//TCDriver_SendStatement(tc_lrs, stmt);
 	
 }
 
@@ -459,7 +475,7 @@ function TCCSetParameter(parameter,value)
 {
 
 	//Whatever happens, store value in the state in case we need it later
-	TCDriver_SetState (tc_lrs, courseId, parameter, value);
+	myTinCan.setState(parameter, value, stateCfg);
 
 	//For SCORM 2004, Captivate sets a series of data every time it enters a new slide. 
 	//It always sets the same data regardless of changes.
@@ -641,7 +657,7 @@ function TCCSetParameter(parameter,value)
 function TCCGetState(parameter)
 {
 	//Trim any quotes surrounding the returned values. 
-	var rtnStr = TCDriver_GetState (tc_lrs, courseId, parameter);
+	var rtnStr = myTinCan.getState(parameter, stateCfg).contents;
 	if (rtnStr == undefined)
 		{rtnStr = ""}
 	else
@@ -662,7 +678,7 @@ function TCCGetParameter(parameter)
 	case "cmi.entry": // (ab_initio, resume, ��, RO) Asserts whether the learner has previously accessed the SCO
 		var entryState = TCCGetState("cmi.entry");
 		//Next time the user loads this activty, cmi.entry tells captivate that they have accessed this before. 
-		TCDriver_SetState (tc_lrs, courseId, "cmi.entry", "resume");
+		myTinCan.setState("cmi.entry", "resume", stateCfg);
 		
 		return entryState;
 		break;

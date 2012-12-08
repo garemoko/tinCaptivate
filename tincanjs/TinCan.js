@@ -33,9 +33,10 @@ var TinCan;
     @class TinCan
     @constructor
     @param {Object} [options] Configuration used to initialize.
-        @param {Array} [options.recordStores] list of pre-configured LRSes
         @param {String} [options.url] URL for determining launch provided
             configuration options
+        @param {Array} [options.recordStores] list of pre-configured LRSes
+        @param {Object|TinCan.Activity} [options.activity] default activity
     **/
     TinCan = function (cfg) {
         this.log("constructor");
@@ -54,7 +55,7 @@ var TinCan;
 
         /**
         Default actor used when preparing statements that
-        don't yet have an actor set
+        don't yet have an actor set, and for saving state, etc.
 
         @property actor
         @type Object
@@ -102,10 +103,10 @@ var TinCan;
         @param {String} msg Message to output
         */
         log: function (msg, src) {
-            if (TinCan.DEBUG == 1 && console && console.log) {
+            if (TinCan.DEBUG && console && console.log) {
                 src = src || this.LOG_SRC || "TinCan";
 
-                console.log(src + ': ' + msg);
+                console.log("TinCan." + src + ': ' + msg);
             }
         },
 
@@ -115,6 +116,7 @@ var TinCan;
         */
         init: function (cfg) {
             this.log("init");
+            var i;
 
             cfg = cfg || {};
 
@@ -122,6 +124,20 @@ var TinCan;
 
             if (cfg.hasOwnProperty("url") && cfg.url !== "") {
                 this._initFromQueryString(cfg.url);
+            }
+
+            if (cfg.hasOwnProperty("recordStores") && cfg.recordStores !== undefined) {
+                for (i = 0; i < cfg.recordStores.length; i += 1) {
+                    this.addRecordStore(cfg.recordStores[i]);
+                }
+            }
+            if (cfg.hasOwnProperty("activity")) {
+                if (cfg.activity instanceof TinCan.Activity) {
+                    this.activity = cfg.activity;
+                }
+                else {
+                    this.activity = new TinCan.Activity (cfg.activity);
+                }
             }
         },
 
@@ -137,7 +153,7 @@ var TinCan;
                 prop,
                 qsParams = TinCan.Utils.parseURL(url).params,
                 lrsProps = ["endpoint", "auth"],
-                lrsCfg,
+                lrsCfg = {},
                 activityCfg,
                 contextCfg
             ;
@@ -182,6 +198,7 @@ var TinCan;
                     contextCfg.registration = this.registration = qsParams.registration;
                 }
                 if (qsParams.hasOwnProperty("grouping")) {
+                    contextCfg.contextActivities = {};
                     contextCfg.contextActivities.grouping = qsParams.grouping;
                 }
 
@@ -217,8 +234,13 @@ var TinCan;
         */
         addRecordStore: function (cfg) {
             this.log("addRecordStore");
-
-            var lrs = new TinCan.LRS (cfg);
+            var lrs;
+            if (cfg instanceof TinCan.LRS) {
+                lrs = cfg;
+            }
+            else {
+                lrs = new TinCan.LRS (cfg);
+            }
             this.recordStores.push(lrs);
         },
 
@@ -236,6 +258,9 @@ var TinCan;
 
             if (stmt.actor === null && this.actor !== null) {
                 stmt.actor = this.actor;
+            }
+            if (stmt.target === null && this.activity !== null) {
+                stmt.target = this.activity;
             }
 
             if (this.context !== null) {
@@ -258,6 +283,12 @@ var TinCan;
                             if (this.context.contextActivities.grouping !== null && stmt.context.contextActivities.grouping === null) {
                                 stmt.context.contextActivities.grouping = this.context.contextActivities.grouping;
                             }
+                            if (this.context.contextActivities.parent !== null && stmt.context.contextActivities.parent === null) {
+                                stmt.context.contextActivities.parent = this.context.contextActivities.parent;
+                            }
+                            if (this.context.contextActivities.other !== null && stmt.context.contextActivities.other === null) {
+                                stmt.context.contextActivities.other = this.context.contextActivities.other;
+                            }
                         }
                     }
                 }
@@ -270,8 +301,8 @@ var TinCan;
         Calls saveStatement on each configured LRS, provide callback to make it asynchronous
 
         @method sendStatement
-        @param {TinCan.Statement} Send statement to LRS
-        @param {Function} Callback function to execute on completion
+        @param {TinCan.Statement|Object} statement Send statement to LRS
+        @param {Function} [callback] Callback function to execute on completion
         */
         sendStatement: function (stmt, callback) {
             this.log("sendStatement");
@@ -285,6 +316,7 @@ var TinCan;
 
             if (rsCount > 0) {
                 statement = this.prepareStatement(stmt);
+
                 /*
                    when there are multiple LRSes configured and
                    if there is a callback that is a function then we need
@@ -335,8 +367,8 @@ var TinCan;
         Calls retrieveStatement on each configured LRS until it gets a result, provide callback to make it asynchronous
 
         @method getStatement
-        @param {String} Statement ID to get
-        @param {Function} Callback function to execute on completion
+        @param {String} statement Statement ID to get
+        @param {Function} [callback] Callback function to execute on completion
         @return {TinCan.Statement} Retrieved statement from LRS
 
         TODO: make TinCan track statements it has seen in a local cache to be returned easily
@@ -399,7 +431,7 @@ var TinCan;
         },
 
         /**
-        Calls saveStatements with list of statements
+        Calls saveStatements with list of prepared statements
 
         @method sendStatements
         @param {Array} Array of statements to send
@@ -539,7 +571,7 @@ var TinCan;
         @method getState
         @param {String} key Key to retrieve from the state
         @param {Object} [cfg] Configuration for request
-            @param {Object} [cfg.actor] Actor used in query,
+            @param {Object} [cfg.agent] Agent used in query,
                 defaults to 'actor' property if empty
             @param {Object} [cfg.activity] Activity used in query,
                 defaults to 'activity' property if empty
@@ -568,7 +600,7 @@ var TinCan;
                 cfg = cfg || {};
 
                 queryCfg = {
-                    actor: (typeof cfg.actor !== "undefined" ? cfg.actor : this.actor),
+                    agent: (typeof cfg.agent !== "undefined" ? cfg.agent : this.actor),
                     activity: (typeof cfg.activity !== "undefined" ? cfg.activity : this.activity)
                 };
                 if (typeof cfg.registration !== "undefined") {
@@ -598,7 +630,7 @@ var TinCan;
         @param {String} key Key to store into the state
         @param {String|Object} val Value to store into the state, objects will be stringified to JSON
         @param {Object} [cfg] Configuration for request
-            @param {Object} [cfg.actor] Actor used in query,
+            @param {Object} [cfg.agent] Agent used in query,
                 defaults to 'actor' property if empty
             @param {Object} [cfg.activity] Activity used in query,
                 defaults to 'activity' property if empty
@@ -627,7 +659,7 @@ var TinCan;
                 cfg = cfg || {};
 
                 queryCfg = {
-                    actor: (typeof cfg.actor !== "undefined" ? cfg.actor : this.actor),
+                    agent: (typeof cfg.agent !== "undefined" ? cfg.agent : this.actor),
                     activity: (typeof cfg.activity !== "undefined" ? cfg.activity : this.activity)
                 };
                 if (typeof cfg.registration !== "undefined") {
@@ -656,7 +688,7 @@ var TinCan;
         @method deleteState
         @param {String|null} key Key to remove from the state, or null to clear all
         @param {Object} [cfg] Configuration for request
-            @param {Object} [cfg.actor] Actor used in query,
+            @param {Object} [cfg.agent] Agent used in query,
                 defaults to 'actor' property if empty
             @param {Object} [cfg.activity] Activity used in query,
                 defaults to 'activity' property if empty
@@ -685,7 +717,7 @@ var TinCan;
                 cfg = cfg || {};
 
                 queryCfg = {
-                    actor: (typeof cfg.actor !== "undefined" ? cfg.actor : this.actor),
+                    agent: (typeof cfg.agent !== "undefined" ? cfg.agent : this.actor),
                     activity: (typeof cfg.activity !== "undefined" ? cfg.activity : this.activity)
                 };
                 if (typeof cfg.registration !== "undefined") {
@@ -889,7 +921,7 @@ var TinCan;
         // newest first so we can use the first as the default
         return [
             "0.95",
-            "0.90"
+            "0.9"
         ];
     };
 

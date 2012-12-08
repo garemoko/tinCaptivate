@@ -34,7 +34,7 @@ TinCan client library
         @param {TinCan.Activity|TinCan.Agent|TinCan.StatementRef|TinCan.SubStatement} [cfg.target] Object of statement
         @param {TinCan.Result} [cfg.result] Statement Result
         @param {TinCan.Context} [cfg.context] Statement Context
-        @param {Object} [cfg.authority] Statement Authority
+        @param {TinCan.Agent} [cfg.authority] Statement Authority
         @param {Boolean} [cfg.voided] Whether the statement has been voided
         @param {Boolean} [cfg.inProgress] Whether the statement is in progress
     @param {Integer} [storeOriginal] Whether to store a JSON stringified version
@@ -51,19 +51,19 @@ TinCan client library
 
         /**
         @property actor
-        @type Object
+        @type TinCan.Agent|TinCan.Group|null
         */
         this.actor = null;
 
         /**
         @property verb
-        @type Object
+        @type TinCan.Verb|null
         */
         this.verb = null;
 
         /**
         @property target
-        @type Object
+        @type TinCan.Activity|TinCan.Agent|TinCan.StatementRef|TinCan.SubStatement|null
         */
         this.target = null;
 
@@ -81,19 +81,19 @@ TinCan client library
 
         /**
         @property timestamp
-        @type Date
+        @type String
         */
         this.timestamp = null;
 
         /**
         @property stored
-        @type Date
+        @type String
         */
         this.stored = null;
 
         /**
         @property authority
-        @type Object
+        @type TinCan.Agent|null
         */
         this.authority = null;
 
@@ -114,10 +114,9 @@ TinCan client library
         /**
         @property inProgress
         @type Boolean
-        @default false
         @deprecated
         */
-        this.inProgress = false;
+        this.inProgress = null;
 
         /**
         @property originalJSON
@@ -151,6 +150,7 @@ TinCan client library
             this.log("init");
             var i,
                 directProps = [
+                    "id",
                     "stored",
                     "timestamp",
                     "inProgress",
@@ -161,37 +161,80 @@ TinCan client library
 
             cfg = cfg || {};
 
-            if (this.id === null) {
-                this.id = TinCan.Utils.getUUID();
-            }
-
             if (cfg.hasOwnProperty("object")) {
                 cfg.target = cfg.object;
             }
 
             if (cfg.hasOwnProperty("actor")) {
+                if (typeof cfg.actor.objectType === "undefined" || cfg.actor.objectType === "Person") {
+                    cfg.actor.objectType = "Agent";
+                }
+
                 // TODO: check to see if already this type
-                this.actor = new TinCan.Agent (cfg.actor);
+                if (cfg.actor.objectType === "Agent") {
+                    this.actor = new TinCan.Agent (cfg.actor);
+                } else if (cfg.actor.objectType === "Group") {
+                    this.actor = new TinCan.Group (cfg.actor);
+                }
+            }
+            if (cfg.hasOwnProperty("authority")) {
+                if (typeof cfg.authority.objectType === "undefined" || cfg.authority.objectType === "Person") {
+                    cfg.authority.objectType = "Agent";
+                }
+
+                // TODO: check to see if already this type
+                if (cfg.authority.objectType === "Agent") {
+                    this.actor = new TinCan.Agent (cfg.actor);
+                } else if (cfg.actor.objectType === "Group") {
+                    this.actor = new TinCan.Group (cfg.actor);
+                }
             }
             if (cfg.hasOwnProperty("verb")) {
                 // TODO: check to see if already this type
                 this.verb = new TinCan.Verb (cfg.verb);
             }
-            if (cfg.hasOwnProperty("target")) {
-                // TODO: check to see if already this type,
-                //       need to look at object type rather
-                //       than assuming Activity
-                this.target = new TinCan.Activity (cfg.target);
+            if (cfg.hasOwnProperty("target")) { 
+            	/* what does this section do???
+                
+                // TODO: check to see if already this type
+                if (typeof cfg.target.objectType === "undefined") {
+                    cfg.target.objectType = "Activity";
+                }
+
+                if (cfg.target.objectType === "Activity") {
+                	alert (cfg.target.id);
+                    this.target = new TinCan.Activity (cfg.target);
+                } else if (cfg.target.objectType === "Agent") {
+                    this.target = new TinCan.Agent (cfg.target);
+                } else if (cfg.target.objectType === "SubStatement") {
+                    this.target = new TinCan.SubStatement (cfg.target);
+                } else if (cfg.target.objectType === "StatementRef") {
+                    this.target = new TinCan.StatementRef (cfg.target);
+                } else {
+                    this.log("Unrecognized target type: " + cfg.target.objectType);
+                }
+                */ 
             }
             if (cfg.hasOwnProperty("result")) {
                 // TODO: check to see if already this type
                 this.result = new TinCan.Result (cfg.result);
+            }
+            if (cfg.hasOwnProperty("context")) {
+                // TODO: check to see if already this type
+                this.context = new TinCan.Context (cfg.context);
             }
 
             for (i = 0; i < directProps.length; i += 1) {
                 if (cfg.hasOwnProperty(directProps[i]) && cfg[directProps[i]] !== null) {
                     this[directProps[i]] = cfg[directProps[i]];
                 }
+            }
+
+            if (this.id === null) {
+                this.id = TinCan.Utils.getUUID();
+            }
+            if (this.timestamp === null) {
+                this.timestamp = TinCan.Utils.getISODateString(new Date());
             }
         },
 
@@ -201,7 +244,11 @@ TinCan client library
         */
         toString: function (lang) {
             this.log("toString");
-            return this.actor.toString() + " " + this.verb.toString() + " " + this.target.toString();
+            return (this.actor !== null ? this.actor.toString(lang) : "") +
+                    " " +
+                    (this.verb !== null ? this.verb.toString(lang) : "") +
+                    " " +
+                    (this.target !== null ? this.target.toString(lang) : "");
         },
 
         /**
@@ -211,7 +258,19 @@ TinCan client library
         */
         asVersion: function (version) {
             this.log("asVersion");
-            var result;
+            var result,
+                optionalDirectProps = [
+                    "id",
+                    "timestamp",
+                    "stored",
+                    "voided"
+                ],
+                optionalObjProps = [
+                    "result",
+                    "context",
+                    "authority"
+                ],
+                i;
 
             version = version || TinCan.versions()[0];
 
@@ -220,11 +279,20 @@ TinCan client library
                 verb: this.verb.asVersion(version),
                 object: this.target.asVersion(version)
             };
-            if (this.result !== null) {
-                result.result = this.result.asVersion(version);
+            for (i = 0; i < optionalDirectProps.length; i += 1) {
+                if (this[optionalDirectProps[i]] !== null) {
+                    result[optionalDirectProps[i]] = this[optionalDirectProps[i]];
+                }
+            }
+            for (i = 0; i < optionalObjProps.length; i += 1) {
+                if (this[optionalObjProps[i]] !== null) {
+                    result[optionalObjProps[i]] = this[optionalObjProps[i]].asVersion(version);
+                }
             }
 
-            // TODO: add timestamp
+            if (version === "0.9" && this.inProgress !== null) {
+                result.inProgress = this.inProgress;
+            }
 
             return result;
         }
