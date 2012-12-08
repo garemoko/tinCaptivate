@@ -45,7 +45,7 @@ completionChanged = false; //used to track if the completion status has been chn
 /*============END OTHER GLOBAL VARIABLES==============*/
 
 /*============CREATE LRS OBJECT==============*/
-/* Hard coded for testing purposes only. */
+/* Hard coded for testing purposes only. Change these values every time you test. */
 var myTCVars = new Object();;
 myTCVars.endpoint = "https://cloud.scorm.com/ScormEngineInterface/TCAPI/public/";
 myTCVars.auth = 'Basic ' + Base64.encode("<account id>" + ':' + "<password>"); 
@@ -193,11 +193,29 @@ function resetClock() //reset the duration timer to zero
 
 function TCCSendLessonData(inprogress, exiting)
 {
-var stmt;
+	//This function is called whenever completion status changes
+
+	//Send completed, passed, failed or attempted statement at end of attempt
+	if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) && (!(attemptCompleted)))
+	{
+		
+		endAttempt()
+	
+	}
+	
+	//Send an experienced statement at start and end of session
+	//note: a session may include multiple and/or partial attempts
+	if (((!(value_store["cmi.completion_status"] == "completed"))||(exiting=="true"))&&(!(attemptInProgress == inprogress)))
+	{
+		
+	}
+
+}
 
 
-if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) && (!(attemptCompleted)))
+function endAttempt()
 {
+	var stmt;
 	
 	//Send lesson data statement
 	var verb  = "attempted"; 
@@ -206,7 +224,7 @@ if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) &
 	//Duration is updated in the state every time Captivate passes it so we just need to pull it out the state when it is time to report a statement.  
 	var duration = TCCGetState("cmi.total_time");
 		
-
+	
 	if (value_store["cmi.success_status"] == "passed")
 	{
 		verb = "passed";
@@ -253,32 +271,27 @@ if (((value_store["cmi.completion_status"] == "completed")||(exiting=="true")) &
 		attemptCompleted = true; //Only send this success data once. 
 		//reset the clock. Note: this means slides after the completed attempt but before learner restarts are counted towards next attempt
 		resetClock();
-
 }
 
+function sessionStatement()
+{
+	var stmt;
+    var sessionDuration = value_store["cmi.session_time"];
+    if (sessionDuration == "")
+    {sessionDuration= "PTHM0S"}
 
-	
-	//Send an experienced statement at start and end of attempt
-	//note: a session may include multiple and/or partial attempts
-	if (((!(value_store["cmi.completion_status"] == "completed"))||(exiting=="true"))&&(!(attemptInProgress == inprogress)))
-	{
-	    var sessionDuration = value_store["cmi.session_time"];
-	    if (sessionDuration == "")
-	    {sessionDuration= "PTHM0S"}
-
-		attemptInProgress = inprogress; //reset if the user retakes quiz
-		stmt = 
-		{ 
-			"verb": "experienced",
-			"inProgress":inprogress,
-			"object":{"id":courseId},
-			"result": { "duration": sessionDuration }
-		};
-		TCDriver_Log(stmt);
-		TCDriver_SendStatement(tc_lrs, stmt);
-	}
-
+	attemptInProgress = inprogress; //reset if the user retakes quiz
+	stmt = 
+	{ 
+		"verb": "experienced",
+		"inProgress":inprogress, //false for end of session, true for start of session
+		"object":{"id":courseId},
+		"result": { "duration": sessionDuration }
+	};
+	TCDriver_Log(stmt);
+	TCDriver_SendStatement(tc_lrs, stmt);
 }
+
 
 function TCCSendInteractionData(interactionIndex)
 {
@@ -343,7 +356,7 @@ function TCCSendInteractionData(interactionIndex)
 			"duration": value_store["cmi.interactions." + interactionIndex + ".latency"],
 			"score" : { "raw" : interactionScore}
 		},
-		"timestamp": value_store["cmi.interactions." + interactionIndex + ".timestamp"]
+		"timestamp": convertSecondsToCMITimespan(value_store["cmi.interactions." + interactionIndex + ".timestamp"])
 	};
 	
 	
