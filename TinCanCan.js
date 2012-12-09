@@ -93,9 +93,6 @@ var myActivity = new TinCan.Activity({
 	definition : captivateActivityDefinition
 });
 
-//Tell the Tin Can driver to use this activity for all statements
-TinCan.Activity = myActivity;
-
 /*============END CREATE THE ACTIVTY OBJECT==============*/
 
 //TODO: ADD CONTEXT TO INCLUDE REVISION AND REGISTRATION AS A MINIMUM
@@ -422,11 +419,18 @@ myTinCan.log("~~~~~~~~~~~~~~~~Stopped statement");
 
 function TCCSendInteractionData(interactionIndex)
 {
-	//Captivate doesn't report a desciption, though we could set this up as an array in the html file or something. 
-	var enInterationDescription = "Captivate Question"; //value_store["cmi.interactions." + interactionIndex + "description"];
+	
+	//Captivate doesn't report a desciption
+	//TODO: get these from somewhere clever e.g. some xml file
+	var enInterationDescription = "Captivate Question"; 
+	var questionName = "Captivate Question"; 
+	
+	//verb
+	var interactionVerb = getVerb("answered", "http://adlnet.gov/expapi/verbs/");
 	
 	var correctResponsesPattern = new Array();
 	var correctResponsesIndex = 0;
+	
 	while(1==1) //there's got to be a better way of coding this...
 	{
 		 var correctResponsesPatterntemp = value_store["cmi.interactions." + interactionIndex + ".correct_responses." + correctResponsesIndex + ".pattern"];
@@ -436,60 +440,62 @@ function TCCSendInteractionData(interactionIndex)
 		 {correctResponsesPattern[correctResponsesIndex] = correctResponsesPatterntemp}
 		 correctResponsesIndex++;
 	}
-	
-	var questionName = "Captivate Question";
-	
-	
-	var interactionObj = {
-		"id":courseId + '/' + value_store["cmi.interactions." + interactionIndex + ".id"],
-		"definition":{
-			"name":{"en-US":questionName, "en-GB":questionName},
-			"description":{"en-US":enInterationDescription,"en-GB":enInterationDescription},
-			"type": "question",
-            "interactionType": value_store["cmi.interactions." + interactionIndex + ".type"],
-			"correctResponsesPattern": correctResponsesPattern
+	//Create the activity definition
+	var interactionDefinition = new TinCan.ActivityDefinition({
+		type : "http://adlnet.gov/expapi/activities/cmi.interaction",
+		name:  {
+			"en-US" : questionName,
+			"en-GB" : questionName 
 		},
-        "objectType": "Activity"
-	};
+		description: {
+			"en-US" : enInterationDescription,
+			"en-GB" : enInterationDescription
+		},
+		"interactionType": value_store["cmi.interactions." + interactionIndex + ".type"],
+		"correctResponsesPattern": correctResponsesPattern
+		
+	});
+	//Create the activity
+	var myInteraction = new TinCan.Activity({
+		id : courseId, //+ ':interactions#' + value_store["cmi.interactions." + interactionIndex + ".id"],
+		definition : captivateActivityDefinition //interactionDefinition
+	});
 	
-	var interactionSuccess;
+	//Result
+	var interactionResult = getResult(true);
+	interactionResult.response = value_store["cmi.interactions." + interactionIndex + ".learner_response"];
+	interactionResult.duration = value_store["cmi.interactions." + interactionIndex + ".latency"]
+	//Score
+	interactionResult.score = new TinCan.Score;
+	interactionResult.score.min = 0;
+	interactionResult.score.max = parseInt(value_store["cmi.interactions." + interactionIndex + ".weighting"]);
 	switch (value_store["cmi.interactions." + interactionIndex + ".result"])
 	{
 		case "correct":
-			interactionSuccess = true;
+			interactionResult.success = true;
+			interactionResult.score.scaled = 1;
+			interactionResult.score.raw = interactionResult.score.max;
 		break;
 		case "incorrect":
-			interactionSuccess = false;
+			interactionResult.success = false;
+			interactionResult.score.scaled = 1;
+			interactionResult.score.raw = interactionResult.score.min;
 		break;
 		default:
-			interactionSuccess = "";
 		break;
 	}
 	
-	var interactionScore;
-	if (interactionSuccess == true)
-	{interactionScore = parseInt(value_store["cmi.interactions." + interactionIndex + ".weighting"]);}
-	else
-	{interactionScore = 0;}
-	var stmt = 
-	{ 
-		"verb": "answered",
-		"inProgress":false,
-		"object":interactionObj,
-		"result":
-		{
-			"success":interactionSuccess,
-			"response": value_store["cmi.interactions." + interactionIndex + ".learner_response"],
-			"duration": value_store["cmi.interactions." + interactionIndex + ".latency"],
-			"score" : { "raw" : interactionScore}
-		}, 
-		"timestamp": convertSecondsToCMITimespan(value_store["cmi.interactions." + interactionIndex + ".timestamp"])
-	};
 	
-	
-	//Don't send interaction statements for now...
-	//TCDriver_Log(stmt);
-	//TCDriver_SendStatement(tc_lrs, stmt);
+		//TODO: add timestamp in right format timestamp: convertSecondsToCMITimespan(value_store["cmi.interactions." + interactionIndex + ".timestamp"])
+	//Statement
+	var interactionStmt =  new TinCan.Statement({
+		actor : myTinCan.actor,
+		verb: interactionVerb,
+		target : myInteraction,
+		result: interactionResult
+		
+	},true);
+	myTinCan.sendStatement(interactionStmt, function() {});
 	
 }
 
@@ -600,13 +606,13 @@ function TCCSetParameter(parameter,value)
 				case "weighting": //How many points the question is worth
 				case "learner_response": //(format depends on interaction type, RW) Data generated when a learner responds to an interaction
 				case "result": // (�correct�, �incorrect�, �unanticipated�, �neutral�) or a real number with values that is accurate to seven significant decimal figures real. , RW) Judgment of the correctness of the learner response
-					//compareWithCacheAndSetState(parameter,value,true);
+					compareWithCacheAndSetState(parameter,value,false);
 					break;
 				case "latency": //(timeinterval (second,10,2), RW) Time elapsed between the time the interaction was made available to the learner for response and the time of the first response
 					//Note: I.e. Time taken to answer the question, not (as you might think) the lag the learner was experiencing at the time of the interaction (though this would include lag)! 
 					//Consider reporting "since" and "until" using timestamp and latency data from the cmiCache
 					
-					//compareWithCacheAndSetState(parameter,value,true);
+					compareWithCacheAndSetState(parameter,value,false);
 
 					TCCSendInteractionData(interaction_index);
 					
@@ -615,7 +621,7 @@ function TCCSetParameter(parameter,value)
 				//I have not yet witnessed captivate setting either "description" or "objectives", but they are included for completeness. 
 				case "description": //(localized_string_type (SmallestPossibleMaximum: 250), RW) Brief informative description of the interaction
 				case "objectives._count": //(non-negative integer, RO) Current number of objectives (i.e., objective identifiers) being stored by the LMS for this interaction
-					//compareWithCacheAndSetState(parameter,value,true);
+					compareWithCacheAndSetState(parameter,value,false);
 					break;
 				default:
 				if (interaction_parameter == "correct_responses")
@@ -626,10 +632,10 @@ function TCCSetParameter(parameter,value)
 					{
 						case "pattern":  // (format depends on interaction type, RW) One correct response pattern for the interaction
 							//Note: This needs further testing with all of captivate's question types to see if 'correct_responses.1' etc. need to be supported. 
-							//compareWithCacheAndSetState(parameter,value,true);
+							compareWithCacheAndSetState(parameter,value,false);
 							break;
 						default:
-						TCDriver_Log("Captivate attempt to set the unexpected interaction correct_responses parameter: '" + parameter +"' with value: '" + value +"'");
+						myTinCan.log("Captivate attempt to set the unexpected interaction correct_responses parameter: '" + parameter +"' with value: '" + value +"'");
 					}
 				}
 				else if (interaction_parameter == "objectives")
@@ -641,18 +647,18 @@ function TCCSetParameter(parameter,value)
 						case "id":  //(long_identifier_type (SPM: 4000), RW) Label for objectives associated with the interaction
 							break;
 						default:
-						TCDriver_Log("Captivate attempt to set the unexpected interaction objectives parameter: '" + parameter +"' with value: '" + value +"'");
+						myTinCan.log("Captivate attempt to set the unexpected interaction objectives parameter: '" + parameter +"' with value: '" + value +"'");
 					}
 				}
 				else
 				{
-					TCDriver_Log("Captivate attempt to set the unexpected interaction parameter: '" + parameter +"' with value: '" + value +"'");
+					myTinCan.log("Captivate attempt to set the unexpected interaction parameter: '" + parameter +"' with value: '" + value +"'");
 				}
 			}
 		}
 		else
 		{
-			TCDriver_Log("Captivate attempt to set the unexpected parameter: '" + parameter + "' with value: '" + value +"'");
+			myTinCan.log("Captivate attempt to set the unexpected parameter: '" + parameter + "' with value: '" + value +"'");
 		}
 	}
 	return "true";
@@ -748,7 +754,7 @@ function TCCGetParameter(parameter)
 		return TCCGetState(parameter);
 		break;
 	default:
-		TCDriver_Log("Captivate attempt to get the unexpected parameter: " + parameter);
+		myTinCan.log("Captivate attempt to get the unexpected parameter: " + parameter);
 	}
 	
 	//If we haven't yet returned anything:
