@@ -267,7 +267,7 @@ TinCan client library
                     }
                 }
                 data = cfg.data;
-                this.log(data);
+                this.log('sendRequest data: '+ data);
             }
             else if (this._requestMode === IE) {
                 this.log("sendRequest using XDomainRequest");
