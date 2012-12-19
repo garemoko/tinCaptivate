@@ -31,9 +31,10 @@ var value_store = {}, //stores values such as score so that data is only sent to
 attemptInProgress = false, //value currently sent to LRS
 attemptCompleted = false, //value currently sent to LRS
 completionChanged = false, //used to track if the completion status has been chnaged but not yet reported. 
-startDuration; //the attempt duration at the start of the session
+startDuration, //the attempt duration at the start of the session
+offsetDuration; //used to account for session time that happeend prior to the current attempt.
 /*============END OTHER GLOBAL VARIABLES==============*/
-//TinCan.DEBUG = true;
+TinCan.DEBUG = true;
 //Create an instance of the Tin Can Library
 var myTinCan = new TinCan();
 
@@ -187,8 +188,15 @@ $(function(){
 	
 	//Get the duration from the state if it exists (default "" which we interpret as "PT0H0M0S") and save it for later comparision. 
 	startDuration = value_store["cmi.total_time"]; //must be called AFTER the LRS object has been created 
-
-	myTinCan.sendStatement(statementsCollection.started, function() {});
+	
+	//Send a started statement
+	var stmtToSend; 
+    stmtToSend = statementsCollection.started;
+    stmtToSend.result = new TinCan.Result
+    stmtToSend.result.duration = "PT0S";
+    
+	//Send the statement, no callback
+	myTinCan.sendStatement(stmtToSend, function() {});
 	
 
 	/*============END LAUNCH CODE==============*/
@@ -257,36 +265,43 @@ function getObjectFromQueryString(objectToGet)
 /*============DURATION FUNCTIONS==============*/
 function convertCMITimespanToSeconds(CMITimespan)
 {
-	var indexOfPT = CMITimespan.indexOf("PT");
-	var indexOfH = CMITimespan.indexOf("H");
-	var indexOfM = CMITimespan.indexOf("M");
-	var indexOfS = CMITimespan.indexOf("S");
-	
-	var hours;
-	var minutes;
-	var seconds;
-	
-	if (indexOfH == -1) {
-		indexOfH = indexOfPT + 1;
-		hours = 0;
-		}
-		else {
-		hours = parseInt(CMITimespan.slice(indexOfPT + 2, indexOfH));	
-		};
-		
-	if (indexOfM == -1) {
-		indexOfM = indexOfPT + 1
-		minutes = 0;
-		}
-		else
-		{
-		minutes = parseInt(CMITimespan.slice(indexOfH + 1, indexOfM));
-		};
-	
-	seconds = parseInt(CMITimespan.slice(indexOfM + 1, indexOfS));
-	
-	var timespanInSeconds = parseInt((((hours * 60) + minutes) * 60) + seconds);
-	if (isNaN(timespanInSeconds)){timespanInSeconds=0};
+	var isValueNegative = (CMITimespan.indexOf('-') >= 0);
+	var indexOfT = CMITimespan.indexOf("T");
+    var indexOfH = CMITimespan.indexOf("H");
+    var indexOfM = CMITimespan.indexOf("M");
+    var indexOfS = CMITimespan.indexOf("S");
+    
+    var hours;
+    var minutes;
+    var seconds;
+    
+    if (indexOfH == -1) {
+        indexOfH = indexOfT;
+        hours = 0;
+    }
+    else {
+        hours = parseInt(CMITimespan.slice(indexOfT + 1, indexOfH));    
+    };
+        
+    if (indexOfM == -1) {
+	    indexOfM = indexOfPT
+	    minutes = 0;
+    }
+    else
+    {
+    	minutes = parseInt(CMITimespan.slice(indexOfH + 1, indexOfM));
+    };
+    
+    seconds = parseInt(CMITimespan.slice(indexOfM + 1, indexOfS));
+    
+    var timespanInSeconds = parseInt((((hours * 60) + minutes) * 60) + seconds);
+    if (isNaN(timespanInSeconds)){
+    	timespanInSeconds=0
+    };
+    if (isValueNegative) {
+    	timespanInSeconds = timespanInSeconds * -1;
+    };
+    
 	return timespanInSeconds;
 }
 
@@ -294,29 +309,46 @@ function convertSecondsToCMITimespan(inputSeconds)
 {
 	var hours, minutes, seconds, 
 	i_inputSeconds = parseInt(inputSeconds);
+	var inputIsNegative = "";
+	if (i_inputSeconds < 0)
+	{
+		inputIsNegative = "-";
+		i_inputSeconds = i_inputSeconds * -1;
+	}
+	
 	hours = parseInt((i_inputSeconds) / 3600);
 	minutes = parseInt(((i_inputSeconds) % 3600) / 60);
 	seconds = parseInt(((i_inputSeconds) % 3600) % 60);
-	return "PT"+ hours +"H"+ minutes +"M"+ seconds +"S";
+	
+	var rtnStr = inputIsNegative + "PT";
+	if (hours > 0)
+	{
+		rtnStr += hours +"H";
+	}
+	
+	if (minutes > 0)
+	{
+		rtnStr += minutes +"M";
+	}
+	
+	return rtnStr + seconds +"S";
 }
 
-function addDurations(value_one,value_two)
-{
-	var duration = convertSecondsToCMITimespan(convertCMITimespanToSeconds(value_one) + convertCMITimespanToSeconds(value_two));
-	compareWithCacheAndSetState("cmi.total_time",duration,true)
-	return duration;
-}
 
-function diffDurations(largeValue,smallValue)
-{
-	var duration = convertSecondsToCMITimespan(convertCMITimespanToSeconds(largeValue) - convertCMITimespanToSeconds(smallValue));
-	return duration
-}
 
-function resetClock() //reset the duration timer to zero
+function resetAttemptDuration() //reset the attempt duration timer to zero
 {
-	myTinCan.setState("cmi.total_time", "PTHM0S", stateCfg);
-	startDuration = "PTHM0S";
+	compareWithCacheAndSetState("cmi.total_time","PT0S",false)
+	startDuration = "PT0S";
+	offsetDuration
+	if (value_store["cmi.session_time"] =='')
+	{
+		offsetDuration = "PT0S";
+	}
+	else
+	{
+		offsetDuration = "-" + value_store["cmi.session_time"];
+	}
 };
 
 /*============END DURATION FUNCTIONS==============*/
@@ -333,7 +365,7 @@ function TCCSendLessonData()
 		attemptCompleted = true; //Only send this success data once. 
 		
 		//reset the clock. Note: this means slides after the completed attempt but before learner restarts are counted towards next attempt
-		resetClock();
+		 resetAttemptDuration();
 	}
 
 }
@@ -391,7 +423,7 @@ function sessionStoppedStatement()
 	var stmtToSend;
     var sessionDuration = value_store["cmi.session_time"];
     if (sessionDuration == "")
-    {sessionDuration= "PTHM0S"}
+    {sessionDuration= "PT0S"}
    
     stmtToSend = statementsCollection.stopped;
     stmtToSend.result = new TinCan.Result
@@ -466,6 +498,8 @@ function TCCSendInteractionData(interactionIndex)
 		default:
 		break;
 	}
+	
+	//TODO: add context, particularly parent. 
 
 	//Statement
 	var interactionStmt =  new TinCan.Statement({
@@ -533,9 +567,6 @@ function TCCGetFromCache(parameter)
 }
 
 /*============END GET DATA FROM LRS==============*/
-
-
-
 
 
 

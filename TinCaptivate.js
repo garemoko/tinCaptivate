@@ -86,7 +86,8 @@ function TCCSetParameter(parameter,value)
 		compareWithCacheAndSetState(parameter,value,false);
 		
 		//Update the attempt duration
-		addDurations(startDuration,value);
+		var newAttemptDuration = convertSecondsToCMITimespan(convertCMITimespanToSeconds(startDuration) + convertCMITimespanToSeconds(offsetDuration) + convertCMITimespanToSeconds(value));
+		compareWithCacheAndSetState("cmi.total_time",newAttemptDuration);
 	break;
 	case "cmi.completion_status": // (�completed�, �incomplete�, �not attempted�, �unknown�, RW) Indicates whether the learner has completed the SCO
 		
