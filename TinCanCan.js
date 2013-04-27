@@ -132,12 +132,12 @@ statementsCollection.failed.result = getResult(true, false);
 
 //started - A session started
 statementsCollection.started = makeTemplateStatement();
-statementsCollection.started.verb = getVerb("started", "http://www.tincanapi.co.uk/verbs/");
+statementsCollection.started.verb = getVerb("initialized", "http://adlnet.gov/expapi/verbs/");
 
 
 //stopped - A session ended
 statementsCollection.stopped = makeTemplateStatement();
-statementsCollection.stopped.verb = getVerb("stopped", "http://www.tincanapi.co.uk/verbs/");
+statementsCollection.stopped.verb = getVerb("terminated", "http://adlnet.gov/expapi/verbs/");
 
 
 /*============END=============*/
