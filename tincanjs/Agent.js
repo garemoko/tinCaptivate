@@ -50,7 +50,7 @@ TinCan client library
 
         /**
         @property openid
-        @type Array
+        @type String
         */
         this.openid = null;
 
@@ -146,47 +146,49 @@ TinCan client library
                 }
             }
 
-            if (typeof cfg.name === "object") {
+            if (typeof cfg.name === "object" && cfg.name !== null) {
                 if (cfg.name.length > 1) {
                     this.degraded = true;
                 }
                 cfg.name = cfg.name[0];
             }
-            if ((cfg.mbox !== null) && (typeof cfg.mbox === "object")) {
+            if (typeof cfg.mbox === "object" && cfg.mbox !== null) {
                 if (cfg.mbox.length > 1) {
                     this.degraded = true;
                 }
                 cfg.mbox = cfg.mbox[0];
             }
-            if ((cfg.mbox_sha1sum !== null) && (typeof cfg.mbox_sha1sum === "object")) {
+            if (typeof cfg.mbox_sha1sum === "object" && cfg.mbox_sha1sum !== null) {
                 if (cfg.mbox_sha1sum.length > 1) {
                     this.degraded = true;
                 }
                 cfg.mbox_sha1sum = cfg.mbox_sha1sum[0];
             }
-            if ((cfg.openid !== null) && (typeof cfg.openid === "object")) {
+            if (typeof cfg.openid === "object" && cfg.openid !== null) {
                 if (cfg.openid.length > 1) {
                     this.degraded = true;
                 }
                 cfg.openid = cfg.openid[0];
             }
-            if (cfg.account !== null){
-		        if (typeof cfg.account === "object" && typeof cfg.account.homePage === "undefined" ){
-		            if (cfg.account.length === 0) {
-		                delete cfg.account;
-		            }
-		            else {
-		                if (cfg.account.length > 1) {
-		                    this.degraded = true;
-		                }
-		                cfg.account = cfg.account[0];
-		            }
-		        }
+            if (typeof cfg.account === "object" && cfg.account !== null && typeof cfg.account.homePage === "undefined" && typeof cfg.account.name === "undefined") {
+                if (cfg.account.length === 0) {
+                    delete cfg.account;
+                }
+                else {
+                    if (cfg.account.length > 1) {
+                        this.degraded = true;
+                    }
+                    cfg.account = cfg.account[0];
+                }
             }
 
             if (cfg.hasOwnProperty("account")) {
-                // TODO: check to see if already this type
-                this.account = new TinCan.AgentAccount (cfg.account);
+                if (cfg.account instanceof TinCan.AgentAccount) {
+                    this.account = cfg.account;
+                }
+                else {
+                    this.account = new TinCan.AgentAccount (cfg.account);
+                }
             }
 
             for (i = 0; i < directProps.length; i += 1) {
@@ -209,17 +211,26 @@ TinCan client library
             if (this.mbox !== null) {
                 return this.mbox.replace("mailto:", "");
             }
+            if (this.mbox_sha1sum !== null) {
+                return this.mbox_sha1sum;
+            }
+            if (this.openid !== null) {
+                return this.openid;
+            }
             if (this.account !== null) {
-                return this.account.name;
+                return this.account.toString();
             }
 
-            return "";
+            return this.objectType + ": unidentified";
         },
 
         /**
+        While a TinCan.Agent instance can store more than one reverse functional identifier
+        this method will always only output one to be compliant with the statement sending
+        specification. Order of preference is: mbox, mbox_sha1sum, openid, account
+
         @method asVersion
-        @param {Object} [options]
-        @param {String} [options.version] Version to return (defaults to newest supported)
+        @param {String} [version] Version to return (defaults to newest supported)
         */
         asVersion: function (version) {
             this.log("asVersion: " + version);
@@ -231,19 +242,35 @@ TinCan client library
 
             if (version === "0.9") {
                 if (this.mbox !== null) {
-                    result.mbox = [
-                        this.mbox
-                    ];
+                    result.mbox = [ this.mbox ];
                 }
+                else if (this.mbox_sha1sum !== null) {
+                    result.mbox_sha1sum = [ this.mbox_sha1sum ];
+                }
+                else if (this.openid !== null) {
+                    result.openid = [ this.openid ];
+                }
+                else if (this.account !== null) {
+                    result.account = [ this.account.asVersion(version) ];
+                }
+
                 if (this.name !== null) {
-                    result.name = [
-                        this.name
-                    ];
+                    result.name = [ this.name ];
                 }
             } else {
                 if (this.mbox !== null) {
                     result.mbox = this.mbox;
                 }
+                else if (this.mbox_sha1sum !== null) {
+                    result.mbox_sha1sum = this.mbox_sha1sum;
+                }
+                else if (this.openid !== null) {
+                    result.openid = this.openid;
+                }
+                else if (this.account !== null) {
+                    result.account = this.account.asVersion(version);
+                }
+
                 if (this.name !== null) {
                     result.name = this.name;
                 }
