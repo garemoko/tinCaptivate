@@ -28,11 +28,13 @@ TinCan client library
     */
     TinCan.Utils = {
         /**
+        Generates a UUIDv4 compliant string that should be reasonably unique
+
         @method getUUID
         @return {String} UUID
         @static
 
-        Excerpt from: Math.uuid.js (v1.4)
+        Excerpt from: http://www.broofa.com/Tools/Math.uuid.js (v1.4)
         http://www.broofa.com
         mailto:robert@broofa.com
         Copyright (c) 2010 Robert Kieffer
@@ -51,6 +53,7 @@ TinCan client library
 
         /**
         @method getISODateString
+        @static
         @param {Date} date Date to stringify
         @return {String} ISO date String
         */
@@ -58,10 +61,10 @@ TinCan client library
             function pad (val, n) {
                 var padder,
                     tempVal;
-                if (val === null) {
+                if (typeof val === "undefined" || val === null) {
                     val = 0;
                 }
-                if (n === null) {
+                if (typeof n === "undefined" || n === null) {
                     n = 2;
                 }
                 padder = Math.pow(10, n-1);
@@ -85,13 +88,39 @@ TinCan client library
         },
 
         /**
+        @method getSHA1String
+        @static
+        @param {String} str Content to hash
+        @return {String} SHA1 for contents
+        */
+        getSHA1String: function (str) {
+            /*global CryptoJS*/
+
+            return CryptoJS.SHA1(str).toString(CryptoJS.enc.Hex);
+        },
+
+        /**
+        @method getBase64String
+        @static
+        @param {String} str Content to encode
+        @return {String} Base64 encoded contents
+        */
+        getBase64String: function (str) {
+            /*global CryptoJS*/
+
+            return CryptoJS.enc.Base64.stringify(
+                CryptoJS.enc.Latin1.parse(str)
+            );
+        },
+
+        /**
+        Intended to be inherited by objects with properties that store
+        display values in a language based "dictionary"
+
         @method getLangDictionaryValue
         @param {String} prop Property name storing the dictionary
         @param {String} [lang] Language to return
         @return {String}
-
-        Intended to be inherited by objects with properties that store
-        display values in a language based "dictionary"
         */
         getLangDictionaryValue: function (prop, lang) {
             var langDict = this[prop],
